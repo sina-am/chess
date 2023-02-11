@@ -2,8 +2,10 @@ package database
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	"github.com/sina-am/chess/core"
 	"github.com/sina-am/chess/types"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -14,8 +16,11 @@ import (
 type Database interface {
 	GetAllUsers(ctx context.Context) ([]*types.User, error)
 	InsertUser(ctx context.Context, user *types.User) error
+	UpdateUser(ctx context.Context, user *types.User) error
 	GetUserById(ctx context.Context, id string) (*types.User, error)
 	GetUserByEmail(ctx context.Context, email string) (*types.User, error)
+	AuthenticateUser(ctx context.Context, email string, plainPassword string) (*types.User, error)
+
 	InsertGame(ctx context.Context, game *types.Game) error
 	GetUserGame(ctx context.Context, userId string, gameId string) (*types.Game, error)
 	UpdateUserGame(ctx context.Context, game *types.Game) error
@@ -59,10 +64,23 @@ func (db *mongoDatabase) findUser(ctx context.Context, filter any) (*types.User,
 	user := &types.User{}
 
 	if err := document.Decode(user); err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, ErrNoRecord
+		}
 		return nil, err
 	}
 
 	return user, nil
+}
+
+func (db *mongoDatabase) UpdateUser(ctx context.Context, user *types.User) error {
+	collection := db.getUserCollection()
+	objectId, err := primitive.ObjectIDFromHex(user.Id)
+	if err != nil {
+		return err
+	}
+	_, err = collection.UpdateByID(ctx, objectId, bson.M{"$set": user})
+	return err
 }
 func (db *mongoDatabase) GetAllUsers(ctx context.Context) ([]*types.User, error) {
 	collection := db.getUserCollection()
@@ -152,4 +170,19 @@ func (db *mongoDatabase) UpdateUserGame(ctx context.Context, game *types.Game) e
 		bson.M{"$set": bson.M{"games.$": game}},
 	)
 	return err
+}
+
+func (db *mongoDatabase) AuthenticateUser(ctx context.Context, email string, plainPassword string) (*types.User, error) {
+	user, err := db.GetUserByEmail(ctx, email)
+	if err != nil {
+		if errors.Is(err, ErrNoRecord) {
+			return nil, ErrAuthentication
+		}
+		return nil, err
+	}
+
+	if err := core.VerifyPassword(plainPassword, user.Password); err != nil {
+		return nil, ErrAuthentication
+	}
+	return user, nil
 }

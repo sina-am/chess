@@ -1,0 +1,14 @@
+.Board {
+	margin: 0 auto;
+    margin-top: 5%;
+	background: grey;
+}
+
+.Square {
+    width: 60px; 
+    height: 60px;
+}
+
+tr:nth-child(odd) td:nth-child(even), tr:nth-child(even) td:nth-child(odd) {
+	background: white;
+}

@@ -2,91 +2,40 @@ package engine
 
 import (
 	"context"
-	"time"
+	"fmt"
 
-	"github.com/sina-am/chess/database"
 	"github.com/sina-am/chess/types"
 )
 
-type Game interface {
-	Request(ctx context.Context, from *types.User, to *types.User) error
-	Accept(ctx context.Context, user *types.User, game *types.Game) error
-	// MovePiece(user *types.User, game *types.Game, src types.Location, dst types.Location) error
-}
-
 type standardGame struct {
-	Database database.Database
+	board   Board
+	players [2]*types.Player
+	kings   [2]*types.Piece
 }
 
-func NewStandardGame(db database.Database) (*standardGame, error) {
+func NewStandardGame(board Board, players [2]*types.Player) (*standardGame, error) {
 	return &standardGame{
-		Database: db,
+		board:   board,
+		players: players,
 	}, nil
 }
 
-func (g *standardGame) Request(ctx context.Context, from *types.User, to *types.User) error {
-	newGame := &types.Game{
-		StartedAt: time.Time{},
-		Duration:  10,
-		Players: []types.Player{
-			{
-				UserId:       from.Id,
-				Color:        types.White,
-				IsChecked:    false,
-				IsCheckmated: false,
-				Turn:         true,
-			},
-			{
-				UserId:       to.Id,
-				Color:        types.Black,
-				IsChecked:    false,
-				IsCheckmated: false,
-				Turn:         false,
-			},
-		},
-		StartedBy:  from.Id,
-		IsAccepted: false,
+func (g *standardGame) Play(ctx context.Context, player *types.Player, src, dst types.Location) error {
+	if !player.Turn {
+		return fmt.Errorf("not your turn")
 	}
-	return g.Database.InsertGame(ctx, newGame)
+
+	piece, err := g.board.GetPiece(src)
+	if err != nil {
+		return err
+	}
+
+	if piece.Color != player.Color {
+		return fmt.Errorf("this is not the player's piece")
+	}
+
+	return g.board.MovePiece(piece, dst)
 }
-
-func (g *standardGame) Accept(ctx context.Context, user *types.User, game *types.Game) error {
-	game.Pieces = makePieces()
-	game.Board = makeBoard(game.Pieces)
-	game.IsAccepted = true
-	return g.Database.UpdateUserGame(ctx, game)
-}
-
-// 	pieces := makePieces()
-// 	board := makeBoard(pieces)
-
-// 	return &standardGame{
-// 		Players:    players,
-// 		Pieces:     pieces,
-// 		Board:      board,
-// 		TookPieces: make([]types.Piece, 0),
-// 		Turn:       players[0],
-// 	}
-// }
-
-// func (g *standardGame) MovePiece(playerColor types.Color, src Location, dst Location) error {
-// 	if playerColor != g.Turn.Color {
-// 		return fmt.Errorf("not your turn")
-// 	}
-
-// 	piece := g.Board[src.row][src.col]
-// 	if piece == nil {
-// 		return fmt.Errorf("invalid source location")
-// 	}
-// 	if piece.Color != playerColor {
-// 		return fmt.Errorf("this is not the player's piece")
-// 	}
-// 	if !g.isValidMove(piece, src, dst) {
-// 		return fmt.Errorf("piece %s can't move from %s to %s", piece.String(), src.String(), dst.String())
-// 	}
-
-// 	return g.movePiece(piece, src, dst)
-// }
 
 // func (g *standardGame) getOpponent() *types.Player {
 // 	if g.Turn.Color == types.White {
@@ -121,19 +70,4 @@ func (g *standardGame) Accept(ctx context.Context, user *types.User, game *types
 // 	} else {
 // 		return false
 // 	}
-// }
-
-// func (g *standardGame) movePiece(piece *types.Piece, src, dst Location) error {
-// 	if g.Board[dst.row][dst.col] != nil {
-// 		g.TookPieces = append(g.TookPieces, *g.Board[dst.row][dst.col])
-// 	}
-// 	g.Board[src.row][src.col] = nil
-// 	g.Board[dst.row][dst.col] = piece
-
-// 	if g.checkCheck(piece, dst) {
-// 		opponent := g.getOpponent()
-// 		opponent.IsChecked = true
-// 	}
-// 	g.changeTurn()
-// 	return nil
 // }

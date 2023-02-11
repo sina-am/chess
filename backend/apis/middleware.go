@@ -5,6 +5,21 @@ import (
 	"net/http"
 )
 
+func (s *APIServer) CorsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		s.Logger.Infow("HELLO")
+		w.Header().Set("Access-Control-Allow-Origin", req.Header.Get("Origin"))
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS,PUT")
+		w.Header().Set("Access-Control-Allow-Headers", "content-type, authorization")
+
+		if req.Method == "OPTIONS" {
+			return
+		}
+
+		next.ServeHTTP(w, req)
+	})
+}
+
 func (s *APIServer) LoggerMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		next.ServeHTTP(w, req)

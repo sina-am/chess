@@ -1,5 +1,16 @@
 package types
 
+import "fmt"
+
+type Location struct {
+	Row int `json:"row"`
+	Col int `json:"col"`
+}
+
+func (loc *Location) String() string {
+	return fmt.Sprintf("(%d, %d)", loc.Row, loc.Col)
+}
+
 type PieceType int
 
 const (
@@ -24,6 +35,8 @@ type Piece struct {
 	Type        PieceType
 	PieceNumber PieceNumber
 	Color       Color
+	Location    Location
+	IsDead      bool
 }
 
 func (b *Piece) String() string {

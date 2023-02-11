@@ -13,24 +13,24 @@ import (
 )
 
 func main() {
-	config, err := NewConfig()
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	logger, err := zap.NewProduction()
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	config, err := NewConfig()
+	if err != nil {
+		logger.Fatal(err.Error())
+	}
+
 	db, err := database.NewMongoDatabase(context.TODO(), config.DBAddr, config.DBName)
 	if err != nil {
-		log.Fatal(err)
+		logger.Fatal(err.Error())
 	}
 
 	game, err := engine.NewStandardGame(db)
 	if err != nil {
-		log.Fatal(err)
+		logger.Fatal(err.Error())
 	}
 	types.NewValidator()
 
