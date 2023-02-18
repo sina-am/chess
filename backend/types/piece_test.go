@@ -8,9 +8,8 @@ import (
 
 func TestPieceString(t *testing.T) {
 	piece := Piece{
-		Color:       Black,
-		Type:        King,
-		PieceNumber: 1,
+		Color: Black,
+		Type:  King,
 	}
 	assert.Equal(t, piece.String(), "♔")
 }

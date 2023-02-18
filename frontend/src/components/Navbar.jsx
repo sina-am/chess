@@ -12,9 +12,9 @@ import Button from '@mui/material/Button';
 import Tooltip from '@mui/material/Tooltip';
 import MenuItem from '@mui/material/MenuItem';
 import AdbIcon from '@mui/icons-material/Adb';
-import { Link, useNavigate } from 'react-router-dom';
-import { useUser } from '../lib/auth'
+import { Link, Navigate } from 'react-router-dom';
 import { APP_ROUTES } from '../utils/constants'
+import { UserContext } from '../App';
 
 const pages = [
     { name: "Game", link: APP_ROUTES.GAMES },
@@ -26,15 +26,10 @@ const settings = [
 ];
 
 export function Navbar() {
-    const [user, isAuthenticated] = useUser();
-    const navigate = useNavigate();
+    const {user, setUser} = React.useContext(UserContext);
     const [anchorElNav, setAnchorElNav] = React.useState(null);
     const [anchorElUser, setAnchorElUser] = React.useState(null);
 
-   if(!isAuthenticated) {
-        navigate(APP_ROUTES.SIGN_IN);
-        return;
-    }
     const handleOpenNavMenu = (event) => {
         setAnchorElNav(event.currentTarget);
     };
@@ -147,7 +142,7 @@ export function Navbar() {
                     <Box sx={{ flexGrow: 0 }}>
                         <Tooltip title="Open settings">
                             <IconButton onClick={handleOpenUserMenu} sx={{ p: 0 }}>
-                                <Avatar alt={user.email} src="/static/images/avatar/2.jpg" />
+                                <Avatar alt={user && user.email} src="/static/images/avatar/2.jpg" />
                             </IconButton>
                         </Tooltip>
                         <Menu

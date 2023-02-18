@@ -1,4 +1,4 @@
-const API_URL = 'http://localhost:6969'
+const API_URL = 'http://localhost:8080'
 export const API_ROUTES = {
   SIGN_UP: `${API_URL}/users`,
   GET_USERS: `${API_URL}/users`,
@@ -11,6 +11,7 @@ export const APP_ROUTES = {
   SIGN_IN: '/sign-in',
   SIGN_OUT: '/sign-out',
   GAMES: '/games',
+  ONLINE_GAME: '/game',
   PLAYERS: "/players",
   PROFILE: "/profile",
   DASHBOARD: '/',

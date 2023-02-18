@@ -3,11 +3,12 @@ package main
 import (
 	"context"
 	"log"
+	"net/http"
 
 	"github.com/gorilla/websocket"
 	"github.com/sina-am/chess/apis"
 	"github.com/sina-am/chess/database"
-	"github.com/sina-am/chess/engine"
+	"github.com/sina-am/chess/service"
 	"github.com/sina-am/chess/types"
 	"go.uber.org/zap"
 )
@@ -28,7 +29,7 @@ func main() {
 		logger.Fatal(err.Error())
 	}
 
-	game, err := engine.NewStandardGame(db)
+	gameSrv, err := service.NewGameService(db)
 	if err != nil {
 		logger.Fatal(err.Error())
 	}
@@ -36,13 +37,16 @@ func main() {
 
 	server := apis.APIServer{
 		Addr:          config.SrvAddr,
-		Game:          game,
+		Game:          gameSrv,
 		Logger:        logger.Sugar(),
 		Database:      db,
 		Authenticator: apis.NewJWTAuthentication(config.SecretKey, db),
 		Upgrader: &websocket.Upgrader{
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
+			CheckOrigin: func(r *http.Request) bool {
+				return true
+			},
 		},
 	}
 	logger.Fatal(server.Run().Error())

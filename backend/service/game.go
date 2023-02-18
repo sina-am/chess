@@ -2,47 +2,53 @@ package service
 
 import (
 	"context"
-	"time"
 
 	"github.com/sina-am/chess/database"
+	"github.com/sina-am/chess/engine"
 	"github.com/sina-am/chess/types"
 )
 
 type GameService interface {
-	Request(ctx context.Context, from *types.User, to *types.User) error
-	Accept(ctx context.Context, user *types.User, game *types.Game) error
-	Play(ctx context.Context, user *types.User, game *types.Game, src types.Location, dst types.Location) error
+	StartGame(ctx context.Context, user *types.User) (engine.OnlinePlayer, error)
 }
 
 type gameService struct {
-	db database.Database
+	db    database.Database
+	games []engine.Game
 }
 
 func NewGameService(db database.Database) (*gameService, error) {
 	return &gameService{
-		db: db,
+		db:    db,
+		games: []engine.Game{},
 	}, nil
 }
 
-func (g *gameService) Request(ctx context.Context, duration time.Duration, from *types.User, to *types.User) error {
-	newGame := &types.Game{
-		Duration: duration,
-		Players: []types.Player{
-			{
-				UserId: from.Id,
-			},
-			{
-				UserId: to.Id,
-			},
-		},
-		StartedBy:  from.Id,
-		IsAccepted: false,
+func (g *gameService) StartGame(ctx context.Context, user *types.User) (engine.OnlinePlayer, error) {
+	for _, game := range g.games {
+		if !game.HasStarted() {
+			player, err := game.Join(ctx, user.Id)
+			if err != nil {
+				return nil, err
+			}
+			if err := player.WaitForStart(ctx); err != nil {
+				return nil, err
+			}
+			return player, nil
+		}
 	}
-	return g.db.InsertGame(ctx, newGame)
-}
 
-func (g *gameService) Accept(ctx context.Context, user *types.User, game *types.Game) error {
-	
-	game.IsAccepted = true
-	return g.db.UpdateUserGame(ctx, game)
+	newGame, err := engine.NewOnlineGame(10)
+	if err != nil {
+		return nil, err
+	}
+	g.games = append(g.games, newGame)
+
+	player, err := newGame.Join(ctx, user.Id)
+	if err != nil {
+		return nil, err
+	}
+
+	player.WaitForStart(ctx)
+	return player, nil
 }

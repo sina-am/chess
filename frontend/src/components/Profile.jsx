@@ -1,16 +1,17 @@
 import { Box, TextField, Button, FormControlLabel, Radio, FormControl, FormLabel, RadioGroup, Autocomplete } from "@mui/material";
-import { useState } from "react";
+import { useState, useContext } from "react";
+import { UserContext } from "../App";
 import { useUser } from '../lib/auth'
 
 
 export function Profile() {
-    const [user, isAuthenticated] = useUser();
-
+    const {user, _} = useContext(UserContext);
     const countries = [
-        "Iran", "America"
+        "Germany", "America"
     ]
     const [password, setPassword] = useState("");
-    if (!isAuthenticated) {
+
+    if (!user) {
         return;
     }
 

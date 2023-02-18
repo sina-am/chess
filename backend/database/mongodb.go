@@ -13,19 +13,6 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-type Database interface {
-	GetAllUsers(ctx context.Context) ([]*types.User, error)
-	InsertUser(ctx context.Context, user *types.User) error
-	UpdateUser(ctx context.Context, user *types.User) error
-	GetUserById(ctx context.Context, id string) (*types.User, error)
-	GetUserByEmail(ctx context.Context, email string) (*types.User, error)
-	AuthenticateUser(ctx context.Context, email string, plainPassword string) (*types.User, error)
-
-	InsertGame(ctx context.Context, game *types.Game) error
-	GetUserGame(ctx context.Context, userId string, gameId string) (*types.Game, error)
-	UpdateUserGame(ctx context.Context, game *types.Game) error
-}
-
 type mongoDatabase struct {
 	client       *mongo.Client
 	databaseName string
@@ -75,13 +62,10 @@ func (db *mongoDatabase) findUser(ctx context.Context, filter any) (*types.User,
 
 func (db *mongoDatabase) UpdateUser(ctx context.Context, user *types.User) error {
 	collection := db.getUserCollection()
-	objectId, err := primitive.ObjectIDFromHex(user.Id)
-	if err != nil {
-		return err
-	}
-	_, err = collection.UpdateByID(ctx, objectId, bson.M{"$set": user})
+	_, err := collection.UpdateOne(ctx, bson.M{"_id": user.Id}, bson.M{"$set": user})
 	return err
 }
+
 func (db *mongoDatabase) GetAllUsers(ctx context.Context) ([]*types.User, error) {
 	collection := db.getUserCollection()
 	cur, err := collection.Find(ctx, bson.D{})
@@ -110,15 +94,10 @@ func (db *mongoDatabase) InsertUser(ctx context.Context, user *types.User) error
 	return err
 }
 
-func (db *mongoDatabase) GetUserById(ctx context.Context, id string) (*types.User, error) {
-	objectId, err := primitive.ObjectIDFromHex(id)
-	if err != nil {
-		return nil, err
-	}
-
+func (db *mongoDatabase) GetUserById(ctx context.Context, id primitive.ObjectID) (*types.User, error) {
 	return db.findUser(
 		ctx,
-		bson.D{{Key: "_id", Value: objectId}},
+		bson.D{{Key: "_id", Value: id}},
 	)
 }
 
@@ -130,20 +109,11 @@ func (db *mongoDatabase) GetUserByEmail(ctx context.Context, email string) (*typ
 }
 
 func (db *mongoDatabase) InsertGame(ctx context.Context, game *types.Game) error {
-	userIda, err := primitive.ObjectIDFromHex(game.Players[0].UserId)
-	if err != nil {
-		return err
-	}
-	userIdb, err := primitive.ObjectIDFromHex(game.Players[1].UserId)
-	if err != nil {
-		return err
-	}
-
-	game.Id = primitive.NewObjectID().Hex()
 	collection := db.getUserCollection()
-	_, err = collection.UpdateMany(
+	game.Id = primitive.NewObjectID()
+	_, err := collection.UpdateMany(
 		ctx,
-		bson.M{"$or": bson.A{bson.M{"_id": userIda}, bson.M{"_id": userIdb}}},
+		bson.M{"$or": bson.A{bson.M{"_id": game.Players[0].UserId}, bson.M{"_id": game.Players[1].UserId}}},
 		bson.M{"$push": bson.M{"games": game}},
 	)
 	return err
@@ -153,20 +123,14 @@ func (db *mongoDatabase) GetUserGame(ctx context.Context, userId string, gameId 
 	return nil, nil
 }
 
-func (db *mongoDatabase) UpdateUserGame(ctx context.Context, game *types.Game) error {
-	userIda, err := primitive.ObjectIDFromHex(game.Players[0].UserId)
-	if err != nil {
-		return err
-	}
-	userIdb, err := primitive.ObjectIDFromHex(game.Players[1].UserId)
-	if err != nil {
-		return err
-	}
-
+func (db *mongoDatabase) UpdateGame(ctx context.Context, game *types.Game) error {
 	collection := db.getUserCollection()
-	_, err = collection.UpdateMany(
+	_, err := collection.UpdateMany(
 		ctx,
-		bson.M{"$or": bson.A{bson.M{"_id": userIda}, bson.M{"_id": userIdb}}, "games._id": game.Id},
+		bson.M{"$or": bson.A{
+			bson.M{"_id": game.Players[0].UserId},
+			bson.M{"_id": game.Players[1].UserId}},
+			"games._id": game.Id},
 		bson.M{"$set": bson.M{"games.$": game}},
 	)
 	return err

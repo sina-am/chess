@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
-import { APP_ROUTES } from '../utils/constants';
 import { useNavigate } from 'react-router-dom';
-import { API_ROUTES } from '../utils/constants';
+import { API_ROUTES, APP_ROUTES } from '../utils/constants';
 import axios from 'axios';
 
 export function storeTokenInLocalStorage(token) {
@@ -17,11 +16,10 @@ export function removeTokenFromLocaStorage() {
 }
 
 export async function getAuthenticatedUser() {
-    const defaultReturnObject = { authenticated: false, user: null };
     try {
         const token = getTokenFromLocalStorage();
         if (!token) {
-            return defaultReturnObject;
+            return null;
         }
         const response = await axios({
             method: 'GET',
@@ -31,32 +29,12 @@ export async function getAuthenticatedUser() {
             }
         });
         if (response.data.id) {
-            return { authenticated: true, user: response.data }
+            return response.data 
         }
-        return defaultReturnObject;
+        return null;
     }
     catch (err) {
         console.log('getAuthenticatedUser, Something Went Wrong', err);
-        return defaultReturnObject;
+        return null;
     }
-}
-export function useUser() {
-    const [user, setUser] = useState(null);
-    const [authenticated, setAutenticated] = useState(false);
-    const navigate = useNavigate();
-
-    useEffect((navigate) => {
-        async function getUserDetails() {
-            const { authenticated, user } = await getAuthenticatedUser();
-            if (!authenticated) {
-                navigate(APP_ROUTES.SIGN_IN);
-                return;
-            }
-            setUser(user);
-            setAutenticated(authenticated);
-        }
-        getUserDetails();
-    }, [navigate]);
-
-    return [user, authenticated];
 }

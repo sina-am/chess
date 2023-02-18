@@ -26,22 +26,6 @@ func notFoundHandler(ctx context.Context, w http.ResponseWriter, r *http.Request
 	}
 }
 
-func (s *APIServer) wsHandler(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
-	ws, err := s.Upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		return err
-	}
-
-	defer ws.Close()
-
-	request := &types.MovePieceRequest{}
-	if err := ws.ReadJSON(request); err != nil {
-		return err
-	}
-
-	return ws.WriteJSON(request)
-}
-
 func (s *APIServer) getModel(r *http.Request, model types.RequestModel) error {
 	defer r.Body.Close()
 
@@ -65,7 +49,7 @@ func (s *APIServer) getModel(r *http.Request, model types.RequestModel) error {
 }
 
 func (s *APIServer) insertUserHandler(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
-	userReq := &types.RegisterUserRequest{}
+	userReq := &types.RegistrationRequest{}
 	if err := s.getModel(r, userReq); err != nil {
 		return err
 	}
@@ -78,7 +62,7 @@ func (s *APIServer) insertUserHandler(ctx context.Context, w http.ResponseWriter
 	return writeJSON(w, http.StatusCreated, map[string]string{"message": "created"})
 }
 func (s *APIServer) authenticationHandler(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
-	authReq := &types.AuthenticateUserRequest{}
+	authReq := &types.AuthenticationRequest{}
 	if err := s.getModel(r, authReq); err != nil {
 		return err
 	}
@@ -118,8 +102,13 @@ func (s *APIServer) updateMyUserHandler(ctx context.Context, w http.ResponseWrit
 	if err := s.getModel(r, updateReq); err != nil {
 		return err
 	}
-	s.Database.UpdateUser()
-	return writeJSON(w, http.StatusOK, user)
+
+	myUser.Gender = updateReq.Gender
+	myUser.Picture = updateReq.Picture
+	myUser.Name = updateReq.Name
+
+	s.Database.UpdateUser(ctx, myUser)
+	return writeJSON(w, http.StatusOK, myUser)
 }
 
 func (s *APIServer) getMyUserHandler(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
@@ -128,19 +117,5 @@ func (s *APIServer) getMyUserHandler(ctx context.Context, w http.ResponseWriter,
 }
 
 func (s *APIServer) startGameHandler(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
-	gameReq := &types.StartGameRequest{}
-	if err := s.getModel(r, gameReq); err != nil {
-		return err
-	}
-
-	to, err := s.Database.GetUserById(ctx, gameReq.PlayerUserId)
-	if err != nil {
-		return err
-	}
-
-	if err := s.Game.Request(ctx, ctx.Value(UserIdContext).(*types.User), to); err != nil {
-		return err
-	}
-
 	return writeJSON(w, http.StatusOK, map[string]string{"message": "request created"})
 }

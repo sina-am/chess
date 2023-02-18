@@ -1,10 +1,10 @@
 import { Dashboard } from "../components/layouts/Dashboard";
-import { Profile } from "../components/Profile";
+import { Players } from "../components/Player";
 
-export function ProfilePage() {
+export function PlayersPage() {
     return (
         <Dashboard>
-            <Profile />
+            <Players />
         </Dashboard>
     )
 }

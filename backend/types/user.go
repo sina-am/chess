@@ -3,6 +3,7 @@ package types
 import (
 	"github.com/go-playground/validator"
 	"github.com/sina-am/chess/core"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 var validate *validator.Validate
@@ -16,14 +17,14 @@ type RequestModel interface {
 }
 
 type User struct {
-	Id       string `json:"id" bson:"_id,omitempty"`
-	Email    string `json:"email"`
-	Password string `json:"-"`
-	Picture  string `json:"picture"`
-	Gender   string `json:"gender"`
-	Name     string `json:"name"`
-	Score    int    `json:"score" `
-	Games    []Game `json:"games" `
+	Id       primitive.ObjectID `json:"id" bson:"_id,omitempty"`
+	Email    string             `json:"email"`
+	Password string             `json:"-"`
+	Picture  string             `json:"picture"`
+	Gender   string             `json:"gender"`
+	Name     string             `json:"name"`
+	Score    int                `json:"score" `
+	Games    []Game             `json:"games" `
 }
 
 func NewUser(email, plainPassword string) *User {
@@ -34,21 +35,21 @@ func NewUser(email, plainPassword string) *User {
 	}
 }
 
-type RegisterUserRequest struct {
-	Email    string `json:"email" validate:"required"`
-	Password string `json:"password" validate:"required"`
+type RegistrationRequest struct {
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required,min=6"`
 }
 
-func (u *RegisterUserRequest) Validate() error {
+func (u *RegistrationRequest) Validate() error {
 	return validate.Struct(u)
 }
 
-type AuthenticateUserRequest struct {
-	Email    string `json:"email" validate:"required"`
+type AuthenticationRequest struct {
+	Email    string `json:"email" validate:"required,email"`
 	Password string `json:"password" validate:"required"`
 }
 
-func (u *AuthenticateUserRequest) Validate() error {
+func (u *AuthenticationRequest) Validate() error {
 	return validate.Struct(u)
 }
 

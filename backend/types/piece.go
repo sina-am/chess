@@ -29,14 +29,11 @@ const (
 	Black
 )
 
-type PieceNumber int
-
 type Piece struct {
-	Type        PieceType
-	PieceNumber PieceNumber
-	Color       Color
-	Location    Location
-	IsDead      bool
+	Type     PieceType
+	Color    Color
+	Location Location
+	IsDead   bool
 }
 
 func (b *Piece) String() string {

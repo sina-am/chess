@@ -3,16 +3,16 @@ package apis
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"time"
 
 	"github.com/golang-jwt/jwt"
 	"github.com/sina-am/chess/database"
 	"github.com/sina-am/chess/types"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type Authenticator interface {
-	Authenticate(ctx context.Context, req *http.Request) (*types.User, error)
+	Authenticate(ctx context.Context, token string) (*types.User, error)
 	ObtainToken(user *types.User) (string, error)
 }
 
@@ -30,15 +30,14 @@ func NewJWTAuthentication(secretKey string, database database.Database) *jwtAuth
 
 func (auth *jwtAuthentication) ObtainToken(user *types.User) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"user_id":    user.Id,
+		"user_id":    user.Id.Hex(),
 		"expired_at": time.Now().Add(time.Hour * 24).Format(time.RFC822),
 	})
 
 	return token.SignedString(auth.secretKey)
 }
 
-func (auth *jwtAuthentication) Authenticate(ctx context.Context, req *http.Request) (*types.User, error) {
-	tokenStr := req.Header.Get("Authorization")
+func (auth *jwtAuthentication) Authenticate(ctx context.Context, tokenStr string) (*types.User, error) {
 	if tokenStr == "" {
 		return nil, fmt.Errorf("authorization header is not set")
 	}
@@ -51,13 +50,22 @@ func (auth *jwtAuthentication) Authenticate(ctx context.Context, req *http.Reque
 	return auth.database.GetUserById(ctx, userId)
 }
 
-func (auth *jwtAuthentication) GetUserIdFromToken(tokenStr string) (string, error) {
+func (auth *jwtAuthentication) GetUserIdFromToken(tokenStr string) (primitive.ObjectID, error) {
 	claims, err := auth.decodeToken(tokenStr)
 	if err != nil {
-		return "", err
+		return primitive.NilObjectID, err
 	}
 
-	return claims["user_id"].(string), nil
+	idStr, found := claims["user_id"]
+	if !found {
+		return primitive.NilObjectID, fmt.Errorf("invalid token user_id does not exist")
+	}
+
+	id, err := primitive.ObjectIDFromHex(idStr.(string))
+	if err != nil {
+		return primitive.NilObjectID, fmt.Errorf("invalid objectID")
+	}
+	return id, nil
 }
 
 func (auth *jwtAuthentication) decodeToken(tokenStr string) (jwt.MapClaims, error) {

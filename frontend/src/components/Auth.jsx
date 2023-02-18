@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import axios from 'axios';
 import { Alert, Box, Button, TextField } from '@mui/material'
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { API_ROUTES, APP_ROUTES } from '../utils/constants';
 import { Link, useNavigate } from 'react-router-dom';
 import { useUser, storeTokenInLocalStorage, removeTokenFromLocaStorage } from '../lib/auth';
+import { UserContext } from '../App';
 
 export function SignOut() {
     const navigate = useNavigate();
@@ -31,11 +32,13 @@ export function SignUp() {
                     password,
                 }
             });
-            navigate(APP_ROUTES.SIGN_IN);
+            navigate(APP_ROUTES.SIGN_UP);
         }
         catch (err) {
             if(err.response.status === 401) {
                 setError(err.response.data.message);
+            } else if(err.response.status === 400) {
+                setError(err.response.data.message)
             } else if(err.response.status === 201) {
                 setError(err.response.data.message)
             }
@@ -73,7 +76,7 @@ export function SignUp() {
                 <Button 
                     variant="contained"
                     onClick={signUp}
-                >Login</Button>
+                >Register</Button>
                 <p style={{marginLeft: "40px"}}>
                     Already a user?
                     <Link to={APP_ROUTES.SIGN_IN} style={{marginLeft: "10px"}}>
@@ -85,15 +88,17 @@ export function SignUp() {
     );
 }
 export function SignIn() {
+    const {user, setUser} = useContext(UserContext);
     const navigate = useNavigate();
-    const [user, isAuthenticated] = useUser();
-    if (isAuthenticated) {
-        navigate(APP_ROUTES.DASHBOARD)
-    }
-
     const [error, setError] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+
+    useEffect((user) => {
+        if(user) {
+            navigate(APP_ROUTES.PROFILE)
+        }
+    }, [user]);
 
     const signIn = async () => {
         try {
@@ -106,10 +111,11 @@ export function SignIn() {
                 }
             });
             storeTokenInLocalStorage(response.data.token);
+            setUser()
             navigate(APP_ROUTES.DASHBOARD)
         }
         catch (err) {
-            if(err.response.status === 401) {
+            if(err?.response?.status) {
                 setError(err.response.data.message);
             }
         }

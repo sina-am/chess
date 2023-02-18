@@ -2,15 +2,12 @@ package apis
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	"math/rand"
 	"net/http"
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	"github.com/sina-am/chess/database"
-	"github.com/sina-am/chess/engine"
+	"github.com/sina-am/chess/service"
 	"go.uber.org/zap"
 )
 
@@ -20,32 +17,12 @@ type APIServer struct {
 	Upgrader      *websocket.Upgrader
 	Database      database.Database
 	Authenticator Authenticator
-	Game          engine.Game
+	Game          service.GameService
 }
 
 type RequestID string
 
 type apiFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request) error
-
-func writeJSON(w http.ResponseWriter, statusCode int, v any) error {
-	w.Header().Set("content-type", "application/json")
-	w.WriteHeader(statusCode)
-	return json.NewEncoder(w).Encode(v)
-}
-
-func (s *APIServer) makeAPIHandler(f apiFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(context.TODO(), RequestID("RequestID"), rand.Intn(10000))
-		if err := f(ctx, w, r); err != nil {
-			httpError := &HTTPError{}
-			if errors.As(err, &httpError) {
-				writeJSON(w, httpError.StatusCode, httpError)
-			} else {
-				s.Logger.Errorw(err.Error())
-			}
-		}
-	}
-}
 
 func (s *APIServer) newRouter() *mux.Router {
 	router := mux.NewRouter()
@@ -58,7 +35,7 @@ func (s *APIServer) newRouter() *mux.Router {
 }
 
 func (s *APIServer) attachHandlers(router *mux.Router) *mux.Router {
-	router.HandleFunc("/ws", s.makeAPIHandler(s.wsHandler))
+	router.HandleFunc("/ws", s.wsHandler)
 	router.HandleFunc("/auth", s.makeAPIHandler(s.authenticationHandler)).Methods(http.MethodPost, http.MethodOptions)
 	router.HandleFunc("/users", s.makeAPIHandler(s.insertUserHandler)).Methods(http.MethodPost, http.MethodOptions)
 	router.HandleFunc(

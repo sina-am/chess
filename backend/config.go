@@ -3,7 +3,7 @@ package main
 import "github.com/Netflix/go-env"
 
 type Config struct {
-	SrvAddr   string `env:"SERVER_ADDRESS,default=:6969"`
+	SrvAddr   string `env:"SERVER_ADDRESS,default=:8080"`
 	DBAddr    string `env:"DATABASE_ADDRESS,default=mongodb://localhost"`
 	DBName    string `env:"DATABASE_NAME,default=chess"`
 	SecretKey string `env:"SECRET_KEY,default=notsave"`

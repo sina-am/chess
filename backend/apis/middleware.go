@@ -7,9 +7,8 @@ import (
 
 func (s *APIServer) CorsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		s.Logger.Infow("HELLO")
 		w.Header().Set("Access-Control-Allow-Origin", req.Header.Get("Origin"))
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS,PUT")
+		w.Header().Set("Access-Control-Allow-Methods", "*")
 		w.Header().Set("Access-Control-Allow-Headers", "content-type, authorization")
 
 		if req.Method == "OPTIONS" {
@@ -37,7 +36,8 @@ var UserIdContext string = "user"
 
 func (s *APIServer) AuthenticationMiddleware(f apiFunc) apiFunc {
 	return func(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
-		user, err := s.Authenticator.Authenticate(ctx, r)
+		tokenStr := r.Header.Get("Authorization")
+		user, err := s.Authenticator.Authenticate(ctx, tokenStr)
 		if err != nil {
 			return &HTTPError{
 				StatusCode: http.StatusUnauthorized,
