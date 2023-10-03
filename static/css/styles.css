@@ -1,0 +1,49 @@
+.center {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+.board {
+	margin: 0 auto;
+    margin-top: 5%;
+	background: #257ed6;
+}
+
+.squire {
+    width: 100px; 
+    height: 100px;
+}
+
+.picked {
+    border: 3px solid white;
+}
+
+tr:nth-child(odd) td:nth-child(even), tr:nth-child(even) td:nth-child(odd) {
+	background: #7ea9d3;
+}
+
+button {
+    color: inherit;
+    border: none;
+    padding: 0;
+    font: inherit;
+    cursor: pointer;
+    outline: inherit;
+}
+
+.my-btn {
+    border: 2px solid black;
+    padding: 1% 3rem;
+    letter-spacing: 2px;
+    line-height: 40px;
+    color: black;
+    transition: all .35s;
+
+
+}
+
+.my-btn:hover {
+    background: #016A70;
+    color: #fff;
+}
