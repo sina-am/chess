@@ -21,7 +21,7 @@ class BoardLocation {
     }
 
     compare(location) {
-        return this.row === location.row && this.col === location.col
+        return (this.row === location.row) && (this.col === location.col)
     }
 
     toString() {
@@ -54,11 +54,26 @@ class DummyEngine {
     }
 }
 
+function getEmptyBoard() {
+    const board = [];
+    for(let i = 0; i < 8; i++){
+        board.push([]);
+        for(let j = 0; j < 8; j++) {
+            board[i].push(null);
+        }
+    }
+    board[0][0] = chessSetup[0][4]
+    board[0][6] = chessSetup[0][3]
+    board[7][7] = chessSetup[7][4]
+    return board;
+}
+
 class ChessEngine {
     constructor(board, color) {
         this.board = board;
         this.myColor = color 
         this.turn = WHITE; 
+        this.winner = null;
         this.castlingRight = new Map([[WHITE, true], [BLACK, true]])
 
         this.capturedPieces = new Map([[WHITE, []], [BLACK, []]])
@@ -109,7 +124,7 @@ class ChessEngine {
             this.board[this.lastMove.to.row][this.lastMove.to.col] = null 
         }
 
-        this.switchTurn()
+        this.switchTurn(); 
     }
     isOpponentPiece(piece, dst) {
         return (piece.color === WHITE && this.board[dst.row][dst.col]?.color === BLACK) ||
@@ -128,10 +143,11 @@ class ChessEngine {
         return this.possibleMoves[location.toString()]
     }
 
-    canCheck(kingLocation, dst) {
+    isCheckable(kingLocation) {
+        const kingPiece = this.board[kingLocation.row][kingLocation.col];
         for(let i = 0; i < 8; i++) {
             for(let j = 0; j < 8; j++) {
-                if(this.isOpponentPiece(this.board[dst.row][dst.col], new BoardLocation(i, j))) {
+                if(this.board[i][j] && this.isOpponentPiece(kingPiece, new BoardLocation(i, j))) {
                     if(this.validMove(new BoardLocation(i, j), kingLocation)) {
                         return true
                     }
@@ -167,7 +183,12 @@ class ChessEngine {
                 this.board[dst.row][dst.col] = this.board[src.row][src.col]
                 this.board[src.row][src.col] = null
             
-                if(!this.canCheck(kingLocation, dst)){ 
+                if(this.board[dst.row][dst.col].name === KING) {
+                    if(!this.isCheckable(new BoardLocation(dst.row, dst.col))) {
+                        newPossibleMoves[srcKey].push(dst)
+                    }
+                }
+                else if(!this.isCheckable(kingLocation)){ 
                     newPossibleMoves[srcKey].push(dst)
                 }
 
@@ -180,10 +201,20 @@ class ChessEngine {
             });
         });
 
-        this.possibleMoves = newPossibleMoves
-        console.log(this.possibleMoves);
+        this.possibleMoves = newPossibleMoves 
     }
 
+
+    hasMove() {
+        let moves = false;
+        Object.keys(this.possibleMoves).forEach(srcKey => {
+            if(this.possibleMoves[srcKey].length > 0) {
+                moves = true;
+                return;
+            }
+        });
+        return moves;
+    }
     findPiecePossibleMoves(location) {
         const piece = this.board[location.row][location.col];
         if (!piece) {
@@ -205,13 +236,6 @@ class ChessEngine {
             default:
                 return []
         }
-    }
-
-    /*
-        @param is a king piece
-    */
-    isCheckable(king) {
-        return false
     }
 
     findKingPossibleMoves(piece, location) {
@@ -425,14 +449,19 @@ class ChessEngine {
         if (this.turn !== this.board[src.row][src.col]?.color) {
             return false
         }
-        console.log("so you want do move a piece");
+        if (this.winner) {
+            throw "game is over";
+        }
         if (this.possibleMoves[src.toString()].find(loc => loc.compare(dst))) {
             if (this.move(src, dst)) {
                 this.switchTurn()
+                if(!this.hasMove()) {
+                    console.log("no move remains"); 
+                    
+                    this.winner = oppositeColor(this.turn); 
+                }
                 return true
             }
-        } else {
-            console.log("here");
         }
         return false
     }
@@ -450,6 +479,10 @@ class ChessEngine {
         }
         this.board[dst.row][dst.col] = this.board[src.row][src.col]
         this.board[src.row][src.col] = null
+
+        if(this.board[dst.row][dst.col].name === KING)  {
+            this.castlingRight.set(this.board[dst.row][dst.col].color, false);
+        }
         
         return true
     }
@@ -465,6 +498,9 @@ class ChessEngine {
                 return this.validPawnMove(src, dst)
             case KNIGHT:
                 return this.validKnightMove(src, dst)
+            case KING:
+                return this.validKingMove(src, dst)
+
         }
         return false
     }
@@ -472,6 +508,16 @@ class ChessEngine {
         return (this.validBishopMove(src, dst) || this.validRookMove(src, dst))
     }
 
+    validKingMove(src, dst) {
+        return (src.col == dst.col &&
+            Math.abs(src.row - dst.row) === 1) ||
+            (src.row === dst.row &&
+                Math.abs(src.col - dst.col) === 1) ||
+            (src.col === dst.col+1) && (src.row === dst.row+1) ||
+            (src.col === dst.col+1) && (src.row === dst.row-1) ||
+            (src.col === dst.col-1) && (src.row === dst.row+1) ||
+            (src.col === dst.col-1) && (src.row === dst.row-1)
+    }
     validKnightMove(src, dst) {
         return ((dst.row === src.row + 2 && Math.abs(dst.col - src.col) === 1) ||
             (dst.row === src.row - 2 && Math.abs(dst.col - src.col) === 1) ||

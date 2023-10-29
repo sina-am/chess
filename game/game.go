@@ -20,6 +20,5 @@ type Chess interface {
 	InGame(playerId string) bool
 	GetPlayers() []string
 	Play(playerId string, m Move) error
-	GetPlayerColor(playerId string) Color
-	Exit(playerId string) (string, error)
+	Exit(playerId string) (Color, error)
 }

@@ -1,29 +1,42 @@
+class PieceImages {
+    constructor() {
+        this.images = new Map();
+    }
+    
+    async fetch(name, color) {
+        return await (await fetch(`img/pieces/${name}-${color}.svg`)).text();
+    }
+    async get(name, color) {
+        const cached = this.images.get(`${name}-${color}`);
+        if(cached)  {
+            return cached; 
+        }
+
+        const image = await this.fetch(name, color);
+        this.images.set(`${name}-${color}`, image);
+        return image; 
+    }
+} 
+
 class ChessUI {
     constructor(boardElem, playerElem, opponentElem, board) {
+        this.images = new PieceImages();
         this.boardElem = boardElem;
         this.playerElem = playerElem;
         this.opponentElem = opponentElem;
+        this.gameStatusElem = document.getElementById("gameStatus");
         this.pickedPiece = null;
         this.board = board;
     }
 
-    render() {
+    async render() {
         for(let i = 0; i < 8; i++) {
             for(let j = 0; j < 8; j++) {
                 if(this.board[i][j] !== null) {
-                    document.getElementById(`squire-${i}-${j}`).innerHTML = this.board[i][j].image;
+                    document.getElementById(`squire-${i}-${j}`).innerHTML = 
+                        await this.images.get(this.board[i][j].name, this.board[i][j].color);
                 } else {
                     document.getElementById(`squire-${i}-${j}`).innerHTML = "";
-                }
-            }
-        }
-    }
-    async getImages() {
-        for(let i = 0; i < 8; i++) {
-            for(let j = 0; j < 8; j++) {
-                if(this.board[i][j] !== null) {
-                    this.board[i][j].image = 
-                        await (await fetch(`img/pieces/${this.board[i][j].name}-${this.board[i][j].color}.svg`)).text();
                 }
             }
         }
@@ -41,13 +54,24 @@ class ChessUI {
             );
             document.getElementById(`squire-${this.pickedPiece.row}-${this.pickedPiece.col}`).classList.remove("picked");
             this.pickedPiece = null;
-            this.render();
+            await this.render();
+
+            const winner = actor.hasWinner();
+            if(winner) {
+                this.gameOver(winner);
+            }
+            
         }
+    }
+
+    gameOver(winner) {
+        this.gameStatusElem.innerText = `winner is ${winner}`;
     }
 
     async setUp(player, opponent, actor) {
         await this.setUpBoard(actor);
         await this.setUpBar(player, opponent);
+        await this.render();
     }
     async setUpBar(player, opponent) {
         this.playerElem.innerText = player.name + " " + player.color;
@@ -55,9 +79,19 @@ class ChessUI {
     }
 
     async setUpBoard(actor) {
+        if (this.boardElem.firstChild) {
+            for (let i = 0; i < 8; i++) {
+                for (let j = 0; j < 8; j++) { 
+                    const squire = document.getElementById(`squire-${i}-${j}`);
+                    squire.onclick = async (event) => {
+                        this.squireClick(i, j, actor); 
+                    };
+                }
+            }
+            return;
+        }
         for (let i = 0; i < 8; i++) {
             const row = document.createElement("tr");
-
             for (let j = 0; j < 8; j++) {
                 const squire = document.createElement("td");
                 squire.id = `squire-${i}-${j}`;
@@ -70,7 +104,5 @@ class ChessUI {
             }
             this.boardElem.appendChild(row);
         }
-        await this.getImages();
-        this.render();
     }
 }

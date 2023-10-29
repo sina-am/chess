@@ -7,9 +7,13 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/sina-am/chess/server"
+	"go.uber.org/zap"
 )
 
 func main() {
+	logger, _ := zap.NewProduction()
+	defer logger.Sync()
+
 	s := server.Server{
 		Addr: ":8080",
 		WsUpgrader: websocket.Upgrader{
@@ -18,7 +22,7 @@ func main() {
 			ReadBufferSize:   1024,
 			WriteBufferSize:  1024,
 		},
-		GameHandler: server.NewGameHandler(server.NewWaitList()),
+		GameHandler: server.NewLoggerHandler(logger, server.NewGameHandler(server.NewWaitList())),
 	}
 
 	log.Printf("server is running on %s\n", s.Addr)

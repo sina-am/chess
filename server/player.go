@@ -52,11 +52,11 @@ type player struct {
 	Err  chan error
 	End  chan endMsg
 
-	gameHandler *gameHandler
+	gameHandler GameHandler
 	msgHandler  map[string]func(message) error
 }
 
-func NewPlayer(conn *websocket.Conn, gamHandler *gameHandler) *player {
+func NewPlayer(conn *websocket.Conn, gamHandler GameHandler) *player {
 	p := &player{
 		conn:        conn,
 		gameHandler: gamHandler,
@@ -91,7 +91,7 @@ func (p *player) GetName() string {
 func (p *player) ReadConn() {
 	defer func() {
 		log.Printf("player %s disconnected", p.conn.RemoteAddr())
-		p.gameHandler.unregister <- p
+		p.gameHandler.UnRegister(p)
 		p.conn.Close()
 	}()
 
@@ -116,7 +116,7 @@ func (p *player) ReadConn() {
 func (p *player) WriteConn() {
 	defer func() {
 		p.conn.Close()
-		p.gameHandler.unregister <- p
+		p.gameHandler.UnRegister(p)
 	}()
 
 	for {
@@ -200,7 +200,7 @@ func (p *player) handleStart(msg message) error {
 
 	p.info.status = StatusWaiting
 	p.info.name = payload.Name
-	p.gameHandler.wait <- p
+	p.gameHandler.AddToWaitList(p)
 
 	p.Send <- map[string]string{
 		"message": fmt.Sprintf("Id: %s", p.id),
@@ -224,11 +224,7 @@ func (p *player) handlePlay(msg message) error {
 		return fmt.Errorf("you're not in any game")
 	}
 
-	p.gameHandler.playMove <- playMoveMsg{
-		player: p,
-		gameId: p.info.currentGameId,
-		move:   payload.Move,
-	}
+	p.gameHandler.Play(p, p.info.currentGameId, payload.Move)
 	return nil
 }
 
@@ -237,12 +233,9 @@ func (p *player) handleExit(msg message) error {
 	defer p.info.mu.Unlock()
 
 	if p.info.status == StatusWaiting {
-		p.gameHandler.exitQueue <- p
+		p.gameHandler.RemoveFromWaitList(p)
 	} else if p.info.status == StatusPlaying {
-		p.gameHandler.exitGame <- exitGameMsg{
-			gameId: p.info.currentGameId,
-			player: p,
-		}
+		p.gameHandler.ExitGame(p.info.currentGameId, p)
 	} else {
 		return fmt.Errorf("you don't have a game")
 	}

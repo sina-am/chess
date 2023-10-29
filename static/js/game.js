@@ -1,9 +1,10 @@
 class OfflineChess{
-    constructor(playerName) {
+    constructor(playerName, standardBoard) {
         this.player = {name: playerName, color: null};
         this.status = "started";
         this.opponent = {name: "", color: null};
-        this.board = chessSetup;
+        this.board = standardBoard;
+
     }
     async start() {
         if(Math.random() > 0.5) {
@@ -33,25 +34,37 @@ class OfflineChess{
         }
         return false;
     }
+    hasWinner() {
+        return this.engine.winner;
+    }
     play(from, to) {
         if(!this.engine.movePiece(from, to)) {
             console.log("not your turn");
-            return;
+            return
+        }
+
+        if(this.engine.winner) {
+            this.gameOver();
         }
     }
+
+    gameOver() {
+        this.status = "game over";
+        setGameState(this.status);
+    }
     exit() {
-        console.log("exiting the game");
         this.status = "exited";
         setGameState(this.status);
     }
 }
 class OnlineChess {
-    constructor(ws, playerName) {
+    constructor(ws, playerName, standardBoard) {
         this.player = {name: playerName, color: null};
         this.status = "waiting";
         this.opponent = {};
-        this.board = chessSetup; 
+        this.board = standardBoard; 
         this.ws = ws;
+        this.ui = null;
         ws.addEventListener("message", async (event) => {
             this.update(JSON.parse(event.data))
         });
@@ -64,8 +77,6 @@ class OnlineChess {
             color: oppositeColor(this.player.color),
         };
 
-        console.log("game started");
-        console.log(this.player, this.opponent)
         this.engine = new ChessEngine(this.board, this.player.color);
 
         this.ui = new ChessUI(
@@ -143,7 +154,6 @@ class OnlineChess {
         }));
     }
     exit() {
-        console.log("exiting the game");
         this.status = "exited";
         setGameState(this.status)
         this.ws.send(JSON.stringify({

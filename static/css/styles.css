@@ -4,19 +4,23 @@
     left: 50%;
     transform: translate(-50%, -50%);
 }
+
 .board {
-	margin: 0 auto;
-    margin-top: 5%;
+    border: 3px solid #257ed6;
 	background: #257ed6;
+    border-spacing: 0; 
+    border-collapse: collapse; 
 }
 
 .squire {
-    width: 100px; 
-    height: 100px;
+    height: 4em;
+    width: 4em;
+    text-align: center; 
+    line-height: 0;
 }
 
 .picked {
-    border: 3px solid white;
+    border: 2px solid white;
 }
 
 tr:nth-child(odd) td:nth-child(even), tr:nth-child(even) td:nth-child(odd) {

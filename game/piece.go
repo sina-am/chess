@@ -37,11 +37,13 @@ const (
 	Black
 )
 
-func OppositeColor(color Color) Color {
+func (color Color) OppositeColor() Color {
 	if color == White {
 		return Black
-	} else {
+	} else if color == Black {
 		return White
+	} else {
+		panic("invalid color")
 	}
 }
 
@@ -68,7 +70,7 @@ func (b *Piece) String() string {
 		case Pawn:
 			return "♙"
 		default:
-			panic("unknown peice")
+			panic("unknown piece")
 		}
 	case White:
 		switch b.Type {
@@ -85,9 +87,9 @@ func (b *Piece) String() string {
 		case Pawn:
 			return "♟"
 		default:
-			panic("unknown peice")
+			panic("unknown piece")
 		}
 	default:
-		panic("unkown color")
+		panic("unknown color")
 	}
 }

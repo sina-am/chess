@@ -19,50 +19,82 @@ type exitGameMsg struct {
 	player *player
 }
 
+type GameHandler interface {
+	Start()
+
+	Register(*player)
+	UnRegister(*player)
+
+	Play(player *player, gameId string, move game.Move)
+	ExitGame(gameId string, player *player)
+
+	AddToWaitList(p *player)
+	RemoveFromWaitList(p *player)
+}
+
 type gameHandler struct {
 	games   map[string]game.Chess
 	players map[string]*player
 
-	waitList   WaitList
-	wait       chan *player
-	exitQueue  chan *player
-	register   chan *player
-	unregister chan *player
+	waitList WaitList
 
-	exitGame chan exitGameMsg
-	playMove chan playMoveMsg
+	waitListCh     chan *player
+	exitWaitListCh chan *player
+	registerCh     chan *player
+	unregisterCh   chan *player
+	exitGameCh     chan exitGameMsg
+	playMoveCh     chan playMoveMsg
 }
 
-func NewGameHandler(wl WaitList) *gameHandler {
+func NewGameHandler(wl WaitList) GameHandler {
 	h := &gameHandler{
 		games:   map[string]game.Chess{},
 		players: map[string]*player{},
 
-		waitList:   wl,
-		wait:       make(chan *player),
-		exitQueue:  make(chan *player),
-		exitGame:   make(chan exitGameMsg),
-		playMove:   make(chan playMoveMsg),
-		register:   make(chan *player),
-		unregister: make(chan *player),
+		waitList:       wl,
+		waitListCh:     make(chan *player),
+		exitWaitListCh: make(chan *player),
+		exitGameCh:     make(chan exitGameMsg),
+		playMoveCh:     make(chan playMoveMsg),
+		registerCh:     make(chan *player),
+		unregisterCh:   make(chan *player),
 	}
 
 	return h
 }
+
+func (h *gameHandler) Register(p *player) {
+	h.registerCh <- p
+}
+func (h *gameHandler) UnRegister(p *player) {
+	h.unregisterCh <- p
+}
+func (h *gameHandler) Play(player *player, gameId string, move game.Move) {
+	h.playMoveCh <- playMoveMsg{player: player, gameId: gameId, move: move}
+}
+func (h *gameHandler) ExitGame(gameId string, p *player) {
+	h.exitGameCh <- exitGameMsg{player: p, gameId: gameId}
+}
+func (h *gameHandler) AddToWaitList(p *player) {
+	h.waitListCh <- p
+}
+func (h *gameHandler) RemoveFromWaitList(p *player) {
+	h.exitWaitListCh <- p
+}
 func (h *gameHandler) Start() {
 	for {
 		select {
-		case p := <-h.register:
+		case p := <-h.registerCh:
 			h.handleRegister(p)
-		case p := <-h.unregister:
+		case p := <-h.unregisterCh:
 			h.handleUnregister(p)
-		case pm := <-h.playMove:
+		case pm := <-h.playMoveCh:
 			h.handlePlayerMove(pm.player, pm.move, pm.gameId)
-		case p := <-h.wait:
+		case p := <-h.waitListCh:
 			h.handleWait(p)
-		case p := <-h.exitQueue:
-			h.handleExitQueue(p)
-		case msg := <-h.exitGame:
+		case p := <-h.exitWaitListCh:
+			h.handleExitWaitList(p)
+		case msg := <-h.exitGameCh:
 			h.handleExitGame(msg.player, msg.gameId)
 		}
 	}
@@ -132,18 +164,21 @@ func (h *gameHandler) handlePlayerMove(p *player, move game.Move, gameId string)
 
 func (h *gameHandler) startNewGame(p1, p2 *player) {
 	gameId := uuid.New().String()
-	g := game.NewChess([]string{p1.GetId(), p2.GetId()})
+	g := game.NewChess(map[string]game.Color{
+		p1.GetId(): game.White,
+		p2.GetId(): game.Black,
+	})
 	h.games[gameId] = g
 
 	p1.Join <- joinMsg{
 		GameId:   gameId,
 		Opponent: p2.GetName(),
-		Color:    g.GetPlayerColor(p1.GetId()).String(),
+		Color:    game.White.String(),
 	}
 	p2.Join <- joinMsg{
 		GameId:   gameId,
 		Opponent: p1.GetName(),
-		Color:    g.GetPlayerColor(p2.GetId()).String(),
+		Color:    game.Black.String(),
 	}
 }
 
@@ -173,14 +208,14 @@ func (h *gameHandler) handleExitGame(p *player, gameId string) {
 			p.End <- endMsg{
 				Reason: "abundant",
 				Score:  10,
-				Winner: winner,
+				Winner: winner.String(),
 			}
 		}
 	}
 
 	delete(h.games, gameId)
 }
-func (h *gameHandler) handleExitQueue(p *player) {
+func (h *gameHandler) handleExitWaitList(p *player) {
 	if err := h.waitList.Remove(p); err != nil {
 		p.Err <- err
 	}

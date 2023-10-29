@@ -19,6 +19,8 @@ function setGameState(state) {
             displayElementById("startButton", true);
             displayElementById("startStage", true);
             break;
+        case "game over":
+            alert("Game is over")
         case "waiting":
             displayElementById("game", false);
             displayElementById("startStage", true);
@@ -67,7 +69,8 @@ function switchStage(stage) {
 async function onGameStart(event) {
     const gameMode = document.getElementById('optionMenuSelect').value;
 
-    let chess = null;
+    const newChessSetup = structuredClone(chessSetup);
+
     if(gameMode === "online") {
         const playerName = document.getElementById("playerNameInput").value;
         if (playerName === "") {
@@ -75,17 +78,22 @@ async function onGameStart(event) {
             myModal.toggle();
             return;
         }
-        chess = new OnlineChess(ws, playerName);
+        const chess = new OnlineChess(ws, playerName, newChessSetup);
         switchStage("waiting");
+        await chess.start();
+        document.getElementById("exitBtn").onclick = (event) => {
+            chess.exit();
+            delete chess;
+        };
     } else {
-        chess = new OfflineChess("");
+        const chess = new OfflineChess("", newChessSetup);
         switchStage("started");
+        await chess.start();
+        document.getElementById("exitBtn").onclick = (event) => {
+            chess.exit();
+            delete chess;
+        };
     }
-
-    await chess.start();
-    document.getElementById("exitBtn").onclick = (event) => {
-        chess.exit();
-    };
 }
 
 window.onload = async () => {

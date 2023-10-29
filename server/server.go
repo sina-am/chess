@@ -10,7 +10,7 @@ import (
 type Server struct {
 	Addr        string
 	WsUpgrader  websocket.Upgrader
-	GameHandler *gameHandler
+	GameHandler GameHandler
 }
 
 func (s *Server) ListenAndServe() error {
@@ -31,7 +31,7 @@ func (s *Server) ListenAndServe() error {
 
 		p := NewPlayer(conn, s.GameHandler)
 
-		p.gameHandler.register <- p
+		p.gameHandler.Register(p)
 
 		go p.ReadConn()
 		go p.WriteConn()

@@ -1,37 +1,27 @@
 package game
 
 import (
+	"errors"
 	"fmt"
 	"math"
 )
 
-type chessPlayer struct {
-	Id    string
-	Color Color
-}
+var ErrChecked = errors.New("can't move there")
+var ErrInvalidMove = errors.New("invalid move")
 
 type gameEngine struct {
 	board          [8][8]*Piece
 	kings          map[Color]*Piece
-	players        [2]*chessPlayer
+	players        map[string]Color
 	capturedPieces []*Piece
 	turn           Color
 }
 
-func NewChess(playersId []string) *gameEngine {
+func NewChess(players map[string]Color) *gameEngine {
 	engine := &gameEngine{
-		board: NewStandardBoard(),
-		kings: make(map[Color]*Piece, 2),
-		players: [2]*chessPlayer{
-			{
-				Id:    playersId[0],
-				Color: White,
-			},
-			{
-				Id:    playersId[1],
-				Color: Black,
-			},
-		},
+		board:          NewStandardBoard(),
+		kings:          make(map[Color]*Piece, 2),
+		players:        players,
 		turn:           White,
 		capturedPieces: []*Piece{},
 	}
@@ -41,15 +31,32 @@ func NewChess(playersId []string) *gameEngine {
 	}
 	return engine
 }
+func NewChessFromPieces(players map[string]Color, pieces []*Piece, kings map[Color]*Piece) *gameEngine {
+	engine := &gameEngine{
+		board:          NewBoardFromPieces(pieces),
+		kings:          kings,
+		players:        players,
+		turn:           White,
+		capturedPieces: []*Piece{},
+	}
 
-// func (g *gameEngine) getOpponentPlayer() *chessPlayer {
-// 	for i := 0; i < 2; i++ {
-// 		if !g.players[i].Turn {
-// 			return g.players[i]
-// 		}
-// 	}
-// 	panic("can't find player's turn")
-// }
+	return engine
+}
+func (g *gameEngine) Print() {
+	fmt.Println("########")
+	for i := 0; i < 8; i++ {
+		for j := 0; j < 8; j++ {
+			if g.board[i][j] != nil {
+				fmt.Printf("%s ", g.board[i][j].String())
+			} else {
+				// First character is unicode U+0020
+				fmt.Print("  ")
+			}
+		}
+		fmt.Println()
+	}
+	fmt.Println("########")
+}
 
 func (g *gameEngine) switchTurn() {
 	if g.turn == White {
@@ -59,21 +66,19 @@ func (g *gameEngine) switchTurn() {
 	}
 }
 
-func (g *gameEngine) Exit(playerId string) (string, error) {
-	return "", fmt.Errorf("not implemented yet")
-}
-func (g *gameEngine) GetPlayerColor(playerId string) Color {
-	for i := range g.players {
-		if g.players[i].Id == playerId {
-			return g.players[i].Color
-		}
+func (g *gameEngine) Exit(playerId string) (Color, error) {
+	playerColor, found := g.players[playerId]
+	if !found {
+		return 0, fmt.Errorf("player with id %s not found", playerId)
 	}
-	panic("invalid playerId")
+
+	return playerColor.OppositeColor(), nil
 }
+
 func (g *gameEngine) GetPlayers() []string {
 	var ids []string
-	for i := range g.players {
-		ids = append(ids, g.players[i].Id)
+	for id := range g.players {
+		ids = append(ids, id)
 	}
 	return ids
 }
@@ -81,40 +86,30 @@ func (g *gameEngine) GetPlayers() []string {
 func (g *gameEngine) GetWinner() (string, error) {
 	return "", fmt.Errorf("not implemented yet")
 }
+
 func (g *gameEngine) InGame(playerId string) bool {
-	for i := range g.players {
-		if g.players[i].Id == playerId {
-			return true
-		}
+	if _, found := g.players[playerId]; found {
+		return true
 	}
 	return false
-}
-
-func (g *gameEngine) getPlayerById(id string) (*chessPlayer, error) {
-	for i := range g.players {
-		if g.players[i].Id == id {
-			return g.players[i], nil
-		}
-	}
-	return nil, fmt.Errorf("player not found")
 }
 
 func (g *gameEngine) Play(playerId string, move Move) error {
 	src := move.From
 	dst := move.To
 
-	player, err := g.getPlayerById(playerId)
-	if err != nil {
-		return err
+	playerColor, found := g.players[playerId]
+	if !found {
+		return fmt.Errorf("player not found")
 	}
-	if player.Color != g.turn {
-		return fmt.Errorf("it's not %s turn", player.Color.String())
+	if playerColor != g.turn {
+		return fmt.Errorf("it's not %s turn", playerColor.String())
 	}
-	if player.Color != g.board[src.Row][src.Col].Color {
-		return fmt.Errorf("it's not %s piece", player.Color.String())
+	if playerColor != g.board[src.Row][src.Col].Color {
+		return fmt.Errorf("it's not %s piece", playerColor.String())
 	}
 
-	if err := g.movePiece(player, src, dst); err != nil {
+	if err := g.movePiece(playerColor, src, dst); err != nil {
 		return err
 	}
 	// opponent := g.getOpponentPlayer()
@@ -130,7 +125,7 @@ func (g *gameEngine) isChecked(color Color) bool {
 	if king == nil {
 		panic("king is not there")
 	}
-	opponentColor := OppositeColor(king.Color)
+	opponentColor := king.Color.OppositeColor()
 	for i := 0; i < 8; i++ {
 		for j := 0; j < 8; j++ {
 			if g.board[i][j] != nil && g.board[i][j].Color == opponentColor {
@@ -142,10 +137,31 @@ func (g *gameEngine) isChecked(color Color) bool {
 	}
 	return false
 }
-
-func (g *gameEngine) movePiece(player *chessPlayer, src, dst Location) error {
+func (g *gameEngine) isValidMove(src, dst Location) bool {
+	piece := g.board[src.Row][src.Col]
+	if piece == nil {
+		return false
+	}
+	switch piece.Type {
+	case King:
+		return g.isValidKingMove(src, dst)
+	case Rook:
+		return g.isValidRookMove(src, dst)
+	case Pawn:
+		return g.isValidPawnMove(src, dst)
+	case Bishop:
+		return g.isValidBishopMove(src, dst)
+	case Queen:
+		return g.isValidBishopMove(src, dst) || g.isValidRookMove(src, dst)
+	case Knight:
+		return g.isValidKnightMove(src, dst)
+	default:
+		return false
+	}
+}
+func (g *gameEngine) movePiece(playerColor Color, src, dst Location) error {
 	if !g.isValidMove(src, dst) {
-		return fmt.Errorf("invalid move")
+		return ErrInvalidMove
 	}
 
 	var capturedPiece *Piece
@@ -160,7 +176,7 @@ func (g *gameEngine) movePiece(player *chessPlayer, src, dst Location) error {
 	g.board[dst.Row][dst.Col].Location.Row = dst.Row
 
 	// RoleBack
-	if g.isChecked(player.Color) {
+	if g.isChecked(playerColor) {
 		g.board[src.Row][src.Col] = g.board[dst.Row][dst.Col]
 		if capturedPiece != nil {
 			g.board[dst.Row][dst.Col] = capturedPiece
@@ -170,7 +186,7 @@ func (g *gameEngine) movePiece(player *chessPlayer, src, dst Location) error {
 
 		g.board[src.Row][src.Col].Location.Col = src.Col
 		g.board[src.Row][src.Col].Location.Row = src.Row
-		return fmt.Errorf("you're checked")
+		return ErrChecked
 	}
 
 	g.capturedPieces = append(g.capturedPieces, g.board[dst.Row][dst.Col])
@@ -190,7 +206,7 @@ func (g *gameEngine) isValidKingMove(src, dst Location) bool {
 
 func (g *gameEngine) isValidRookMove(src, dst Location) bool {
 	if src.Col == dst.Col && src.Row < dst.Row {
-		// Move up
+		// Move down
 		for rowStep := src.Row + 1; rowStep < dst.Row; rowStep++ {
 			if g.board[rowStep][dst.Col] != nil {
 				return false
@@ -198,12 +214,13 @@ func (g *gameEngine) isValidRookMove(src, dst Location) bool {
 		}
 		return true
 	} else if src.Col == dst.Col && src.Row > dst.Row {
-		// Move down
+		// Move up
 		for rowStep := src.Row - 1; rowStep > dst.Row; rowStep-- {
 			if g.board[rowStep][dst.Col] != nil {
 				return false
 			}
 		}
+		return true
 	} else if src.Row == dst.Row && src.Col < dst.Col {
 		// Move right
 		for colStep := src.Col + 1; colStep < dst.Col; colStep++ {
@@ -225,7 +242,7 @@ func (g *gameEngine) isValidRookMove(src, dst Location) bool {
 }
 
 func (g *gameEngine) isValidBishopMove(src, dst Location) bool {
-	if (dst.Col-src.Col) == (dst.Row-src.Row) && (dst.Col-src.Col) > 0 {
+	if ((dst.Col - src.Col) == (dst.Row - src.Row)) && ((dst.Col - src.Col) > 0) {
 		// Move up-right
 		colStep := src.Col + 1
 		for rowStep := src.Row + 1; rowStep < dst.Row; rowStep++ {
@@ -235,7 +252,7 @@ func (g *gameEngine) isValidBishopMove(src, dst Location) bool {
 			colStep++
 		}
 		return true
-	} else if (dst.Col-src.Col) == (dst.Row-src.Row) && (dst.Col-src.Col) < 0 {
+	} else if ((dst.Col - src.Col) == (dst.Row - src.Row)) && ((dst.Col - src.Col) < 0) {
 		// Move down-left
 		colStep := src.Col - 1
 		for rowStep := src.Row - 1; rowStep > dst.Row; rowStep-- {
@@ -244,7 +261,8 @@ func (g *gameEngine) isValidBishopMove(src, dst Location) bool {
 			}
 			colStep--
 		}
-	} else if (dst.Col-src.Col) == (dst.Row-src.Row)*-1 && (dst.Col-src.Col) < 0 {
+		return true
+	} else if ((dst.Col - src.Col) == (dst.Row-src.Row)*(-1)) && ((dst.Col - src.Col) < 0) {
 		// Move up-left
 		rowStep := src.Row + 1
 		for colStep := src.Col - 1; colStep > dst.Col; colStep-- {
@@ -254,11 +272,11 @@ func (g *gameEngine) isValidBishopMove(src, dst Location) bool {
 			rowStep++
 		}
 		return true
-	} else if (dst.Col-src.Col) == (dst.Row-src.Row)*-1 && (dst.Col-src.Col) > 0 {
-		// Move down-right
+	} else if ((dst.Col - src.Col) == (dst.Row-src.Row)*(-1)) && ((dst.Col - src.Col) > 0) {
+		// Move up-right
 		rowStep := src.Row - 1
 		for colStep := src.Col + 1; colStep < dst.Col; colStep++ {
-			if g.board[src.Row][colStep] != nil {
+			if g.board[rowStep][colStep] != nil {
 				return false
 			}
 			rowStep--
@@ -294,29 +312,6 @@ func (g *gameEngine) isValidPawnMove(src, dst Location) bool {
 		}
 	}
 	return false
-}
-
-func (g *gameEngine) isValidMove(src, dst Location) bool {
-	piece := g.board[src.Row][src.Col]
-	if piece == nil {
-		return false
-	}
-	switch piece.Type {
-	case King:
-		return g.isValidKingMove(src, dst)
-	case Rook:
-		return g.isValidRookMove(src, dst)
-	case Pawn:
-		return g.isValidPawnMove(src, dst)
-	case Bishop:
-		return g.isValidBishopMove(src, dst)
-	case Queen:
-		return g.isValidBishopMove(src, dst) || g.isValidRookMove(src, dst)
-	case Knight:
-		return g.isValidKnightMove(src, dst)
-	default:
-		return false
-	}
 }
 
 func NewBoardFromPieces(pieces []*Piece) [8][8]*Piece {
