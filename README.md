@@ -1,4 +1,4 @@
-# tic-tac-toe
+# Online Chess 
 Online chess game using golang and js
 
 # Quick Start
