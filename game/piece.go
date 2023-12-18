@@ -7,8 +7,19 @@ type Location struct {
 	Col int `json:"col"`
 }
 
+func (loc Location) Validate() error {
+	if loc.Row >= 0 && loc.Row < 8 && loc.Col >= 0 && loc.Col < 8 {
+		return nil
+	}
+	return ErrOutOfBoardMove
+}
+
 func (loc *Location) String() string {
 	return fmt.Sprintf("(%d, %d)", loc.Row, loc.Col)
+}
+
+func (loc *Location) Equals(loc2 Location) bool {
+	return loc.Row == loc2.Row && loc.Col == loc2.Col
 }
 
 type PieceType int
@@ -35,6 +46,7 @@ func (c Color) String() string {
 const (
 	White Color = iota
 	Black
+	Empty
 )
 
 func (color Color) OppositeColor() Color {
@@ -51,6 +63,7 @@ type Piece struct {
 	Type     PieceType
 	Color    Color
 	Location Location
+	Captured bool
 }
 
 func (b *Piece) String() string {

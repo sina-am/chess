@@ -65,6 +65,7 @@ class OnlineChess {
         this.board = standardBoard; 
         this.ws = ws;
         this.ui = null;
+        this.winner = null;
         ws.addEventListener("message", async (event) => {
             this.update(JSON.parse(event.data))
         });
@@ -128,7 +129,8 @@ class OnlineChess {
                 this.ui.render();
                 break;
             case "ended":
-                if (msg.payload.winner === this.myTile) {
+                this.winner = msg.winner;
+                if (msg.payload.winner === this.player.color) {
                     document.getElementById('gameWinner').innerText = "You won!";
                 } else {
                     document.getElementById('gameWinner').innerText = "You lost";
@@ -145,6 +147,9 @@ class OnlineChess {
         document.getElementById("gameStatus").innerText = this.status;
     }
    
+    hasWinner() {
+        return this.winner;
+    }
     async start() {
         this.ws.send(JSON.stringify({
             "type": "start",

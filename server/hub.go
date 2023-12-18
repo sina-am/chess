@@ -128,11 +128,11 @@ func (h *gameHandler) handlePlayerMove(p *player, move game.Move, gameId string)
 
 	if err := g.Play(p.GetId(), move); err != nil {
 		if errors.Is(err, game.ErrGameEnd) {
-			t, _ := g.GetWinner()
+			color := g.GetWinner()
 			for _, playerId := range g.GetPlayers() {
 				if p, ok := h.players[playerId]; ok {
 					p.End <- endMsg{
-						Winner: t,
+						Winner: color.String(),
 						Score:  10,
 						Reason: "Won",
 					}

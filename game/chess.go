@@ -1,69 +1,144 @@
 package game
 
 import (
-	"errors"
 	"fmt"
 	"math"
 )
 
-var ErrChecked = errors.New("can't move there")
-var ErrInvalidMove = errors.New("invalid move")
-
 type gameEngine struct {
-	board          [8][8]*Piece
-	kings          map[Color]*Piece
-	players        map[string]Color
-	capturedPieces []*Piece
-	turn           Color
+	board   [8][8]*Piece
+	kings   map[Color]*Piece
+	players map[string]Color
+	pieces  map[Color][]*Piece
+	turn    Color
+	ended   bool
+	winner  Color
 }
 
 func NewChess(players map[string]Color) *gameEngine {
 	engine := &gameEngine{
-		board:          NewStandardBoard(),
-		kings:          make(map[Color]*Piece, 2),
-		players:        players,
-		turn:           White,
-		capturedPieces: []*Piece{},
+		board:   newStandardBoard(),
+		kings:   make(map[Color]*Piece, 2),
+		players: players,
+		pieces:  map[Color][]*Piece{White: {}, Black: {}},
+		turn:    White,
 	}
 	engine.kings = map[Color]*Piece{
 		White: engine.board[0][4],
 		Black: engine.board[7][4],
 	}
-	return engine
-}
-func NewChessFromPieces(players map[string]Color, pieces []*Piece, kings map[Color]*Piece) *gameEngine {
-	engine := &gameEngine{
-		board:          NewBoardFromPieces(pieces),
-		kings:          kings,
-		players:        players,
-		turn:           White,
-		capturedPieces: []*Piece{},
-	}
+	engine.pieces[White] = append(engine.pieces[White], engine.board[0][:]...)
+	engine.pieces[White] = append(engine.pieces[White], engine.board[1][:]...)
+	engine.pieces[Black] = append(engine.pieces[Black], engine.board[7][:]...)
+	engine.pieces[Black] = append(engine.pieces[Black], engine.board[6][:]...)
 
 	return engine
 }
-func (g *gameEngine) Print() {
-	fmt.Println("########")
-	for i := 0; i < 8; i++ {
-		for j := 0; j < 8; j++ {
-			if g.board[i][j] != nil {
-				fmt.Printf("%s ", g.board[i][j].String())
-			} else {
-				// First character is unicode U+0020
-				fmt.Print("  ")
+func NewChessFromPieces(players map[string]Color, pieces []*Piece) *gameEngine {
+	engine := &gameEngine{
+		board:   newBoardFromPieces(pieces),
+		kings:   map[Color]*Piece{White: nil, Black: nil},
+		pieces:  map[Color][]*Piece{White: {}, Black: {}},
+		players: players,
+		turn:    White,
+	}
+
+	for _, piece := range pieces {
+		if piece.Type == King {
+			engine.kings[piece.Color] = piece
+		}
+		engine.pieces[piece.Color] = append(engine.pieces[piece.Color], piece)
+	}
+	return engine
+}
+
+func (g *gameEngine) Play(playerId string, move Move) error {
+	if g.ended {
+		return ErrGameEnd
+	}
+
+	if err := move.Validate(); err != nil {
+		return err
+	}
+
+	playerColor, found := g.players[playerId]
+	if !found {
+		return fmt.Errorf("player not found")
+	}
+	if playerColor != g.turn {
+		return ErrNotPlayersTurn
+	}
+	if playerColor != g.board[move.From.Row][move.From.Col].Color {
+		return fmt.Errorf("it's not %s piece", playerColor.String())
+	}
+	if !g.isValidMove(move.From, move.To) {
+		return ErrInvalidPieceMove
+	}
+
+	if err := g.movePiece(playerColor, move.From, move.To); err != nil {
+		return err
+	}
+	g.switchTurn()
+
+	if g.IsCheckmated() {
+		g.winner = g.turn.OppositeColor()
+		g.ended = true
+		return ErrGameEnd
+	}
+	return nil
+}
+
+func (g *gameEngine) IsCheckmated() bool {
+	king := g.kings[g.turn]
+	if !g.isChecked(king.Color) {
+		return false
+	}
+
+	locations := []Location{
+		{king.Location.Row, king.Location.Col - 1},
+		{king.Location.Row, king.Location.Col + 1},
+		{king.Location.Row + 1, king.Location.Col},
+		{king.Location.Row - 1, king.Location.Col},
+		{king.Location.Row + 1, king.Location.Col + 1},
+		{king.Location.Row + 1, king.Location.Col - 1},
+		{king.Location.Row - 1, king.Location.Col + 1},
+		{king.Location.Row - 1, king.Location.Col - 1},
+	}
+	for _, location := range locations {
+		if err := location.Validate(); err != nil {
+			continue
+		}
+		if g.isValidMove(king.Location, location) {
+			dst := location
+			src := king.Location
+
+			var capturedPiece *Piece
+			if g.board[dst.Row][dst.Col] != nil {
+				capturedPiece = g.board[dst.Row][dst.Col]
+				capturedPiece.Captured = true
+			}
+
+			g.board[dst.Row][dst.Col] = g.board[src.Row][src.Col]
+			g.board[src.Row][src.Col] = nil
+
+			g.board[dst.Row][dst.Col].Location.Col = dst.Col
+			g.board[dst.Row][dst.Col].Location.Row = dst.Row
+
+			isChecked := g.isChecked(king.Color)
+			if capturedPiece != nil {
+				capturedPiece.Captured = false
+			}
+			g.board[src.Row][src.Col] = g.board[dst.Row][dst.Col]
+			g.board[dst.Row][dst.Col] = capturedPiece
+			g.board[src.Row][src.Col].Location.Col = src.Col
+			g.board[src.Row][src.Col].Location.Row = src.Row
+
+			if !isChecked {
+				return false
 			}
 		}
-		fmt.Println()
 	}
-	fmt.Println("########")
-}
-
-func (g *gameEngine) switchTurn() {
-	if g.turn == White {
-		g.turn = Black
-	} else {
-		g.turn = White
-	}
+	return true
 }
 
 func (g *gameEngine) Exit(playerId string) (Color, error) {
@@ -83,10 +158,21 @@ func (g *gameEngine) GetPlayers() []string {
 	return ids
 }
 
-func (g *gameEngine) GetWinner() (string, error) {
-	return "", fmt.Errorf("not implemented yet")
+func (g *gameEngine) GetWinner() Color {
+	if g.ended {
+		return g.winner
+	}
+	return Empty
 }
 
+func (g *gameEngine) GetPlayerByColor(color Color) string {
+	for player, playerColor := range g.players {
+		if playerColor == color {
+			return player
+		}
+	}
+	panic("invalid color")
+}
 func (g *gameEngine) InGame(playerId string) bool {
 	if _, found := g.players[playerId]; found {
 		return true
@@ -94,30 +180,54 @@ func (g *gameEngine) InGame(playerId string) bool {
 	return false
 }
 
-func (g *gameEngine) Play(playerId string, move Move) error {
-	src := move.From
-	dst := move.To
+func (g *gameEngine) Print() {
+	fmt.Println("########")
+	for i := 0; i < 8; i++ {
+		for j := 0; j < 8; j++ {
+			if g.board[i][j] != nil {
+				fmt.Printf("%s ", g.board[i][j].String())
+			} else {
+				fmt.Print("  ")
+			}
+		}
+		fmt.Println()
+	}
+	fmt.Println("########")
+}
 
-	playerColor, found := g.players[playerId]
-	if !found {
-		return fmt.Errorf("player not found")
-	}
-	if playerColor != g.turn {
-		return fmt.Errorf("it's not %s turn", playerColor.String())
-	}
-	if playerColor != g.board[src.Row][src.Col].Color {
-		return fmt.Errorf("it's not %s piece", playerColor.String())
+func (g *gameEngine) movePiece(playerColor Color, src, dst Location) error {
+	var capturedPiece *Piece
+	if g.board[dst.Row][dst.Col] != nil {
+		capturedPiece = g.board[dst.Row][dst.Col]
+		capturedPiece.Captured = true
 	}
 
-	if err := g.movePiece(playerColor, src, dst); err != nil {
-		return err
+	g.board[dst.Row][dst.Col] = g.board[src.Row][src.Col]
+	g.board[src.Row][src.Col] = nil
+
+	g.board[dst.Row][dst.Col].Location.Col = dst.Col
+	g.board[dst.Row][dst.Col].Location.Row = dst.Row
+
+	// RoleBack
+	if g.isChecked(playerColor) {
+		if capturedPiece != nil {
+			capturedPiece.Captured = false
+		}
+		g.board[src.Row][src.Col] = g.board[dst.Row][dst.Col]
+		g.board[dst.Row][dst.Col] = capturedPiece
+		g.board[src.Row][src.Col].Location.Col = src.Col
+		g.board[src.Row][src.Col].Location.Row = src.Row
+		return ErrChecked
 	}
-	// opponent := g.getOpponentPlayer()
-	// if g.isChecked(opponent.Color) {
-	// 	opponent.IsChecked = true
-	// }
-	g.switchTurn()
+
 	return nil
+}
+func (g *gameEngine) switchTurn() {
+	if g.turn == White {
+		g.turn = Black
+	} else {
+		g.turn = White
+	}
 }
 
 func (g *gameEngine) isChecked(color Color) bool {
@@ -125,23 +235,27 @@ func (g *gameEngine) isChecked(color Color) bool {
 	if king == nil {
 		panic("king is not there")
 	}
-	opponentColor := king.Color.OppositeColor()
-	for i := 0; i < 8; i++ {
-		for j := 0; j < 8; j++ {
-			if g.board[i][j] != nil && g.board[i][j].Color == opponentColor {
-				if g.isValidMove(g.board[i][j].Location, king.Location) {
-					return true
-				}
-			}
+
+	opponentPieces := g.pieces[king.Color.OppositeColor()]
+	for _, piece := range opponentPieces {
+		if (!piece.Captured) && g.isValidMove(piece.Location, king.Location) {
+			return true
 		}
 	}
 	return false
 }
+
 func (g *gameEngine) isValidMove(src, dst Location) bool {
 	piece := g.board[src.Row][src.Col]
 	if piece == nil {
 		return false
 	}
+	if g.board[dst.Row][dst.Col] != nil {
+		if g.board[src.Row][src.Col].Color == g.board[dst.Row][dst.Col].Color {
+			return false
+		}
+	}
+
 	switch piece.Type {
 	case King:
 		return g.isValidKingMove(src, dst)
@@ -158,39 +272,6 @@ func (g *gameEngine) isValidMove(src, dst Location) bool {
 	default:
 		return false
 	}
-}
-func (g *gameEngine) movePiece(playerColor Color, src, dst Location) error {
-	if !g.isValidMove(src, dst) {
-		return ErrInvalidMove
-	}
-
-	var capturedPiece *Piece
-	if g.board[dst.Row][dst.Col] != nil {
-		capturedPiece = g.board[dst.Row][dst.Col]
-	}
-
-	g.board[dst.Row][dst.Col] = g.board[src.Row][src.Col]
-	g.board[src.Row][src.Col] = nil
-
-	g.board[dst.Row][dst.Col].Location.Col = dst.Col
-	g.board[dst.Row][dst.Col].Location.Row = dst.Row
-
-	// RoleBack
-	if g.isChecked(playerColor) {
-		g.board[src.Row][src.Col] = g.board[dst.Row][dst.Col]
-		if capturedPiece != nil {
-			g.board[dst.Row][dst.Col] = capturedPiece
-		} else {
-			g.board[dst.Row][dst.Col] = nil
-		}
-
-		g.board[src.Row][src.Col].Location.Col = src.Col
-		g.board[src.Row][src.Col].Location.Row = src.Row
-		return ErrChecked
-	}
-
-	g.capturedPieces = append(g.capturedPieces, g.board[dst.Row][dst.Col])
-	return nil
 }
 
 func (g *gameEngine) isValidKingMove(src, dst Location) bool {
@@ -231,7 +312,7 @@ func (g *gameEngine) isValidRookMove(src, dst Location) bool {
 		return true
 	} else if src.Row == dst.Row && src.Col > dst.Col {
 		// Move left
-		for colStep := src.Col - 1; colStep > dst.Col; colStep++ {
+		for colStep := src.Col - 1; colStep > dst.Col; colStep-- {
 			if g.board[src.Row][colStep] != nil {
 				return false
 			}
@@ -314,14 +395,15 @@ func (g *gameEngine) isValidPawnMove(src, dst Location) bool {
 	return false
 }
 
-func NewBoardFromPieces(pieces []*Piece) [8][8]*Piece {
+func newBoardFromPieces(pieces []*Piece) [8][8]*Piece {
 	var board [8][8]*Piece
 	for _, piece := range pieces {
 		board[piece.Location.Row][piece.Location.Col] = piece
 	}
 	return board
 }
-func NewStandardBoard() [8][8]*Piece {
+
+func newStandardBoard() [8][8]*Piece {
 	return [8][8]*Piece{
 		{
 			{
