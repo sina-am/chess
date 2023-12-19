@@ -1,7 +1,7 @@
-package server
+package game
 
 import (
-	"github.com/sina-am/chess/game"
+	"github.com/sina-am/chess/chess"
 	"go.uber.org/zap"
 )
 
@@ -32,7 +32,7 @@ func (h *loggerHandler) UnRegister(p *player) {
 	h.next.UnRegister(p)
 }
 
-func (h *loggerHandler) Play(p *player, gameId string, move game.Move) {
+func (h *loggerHandler) Play(p *player, gameId string, move chess.Move) {
 	h.next.Play(p, gameId, move)
 }
 

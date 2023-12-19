@@ -1,27 +1,25 @@
-package game
+package chess
 
 import (
 	"fmt"
 	"math"
 )
 
-type gameEngine struct {
-	board   [8][8]*Piece
-	kings   map[Color]*Piece
-	players map[string]Color
-	pieces  map[Color][]*Piece
-	turn    Color
-	ended   bool
-	winner  Color
+type chessEngine struct {
+	board    [8][8]*Piece
+	kings    map[Color]*Piece
+	pieces   map[Color][]*Piece
+	turn     Color
+	finished bool
+	winner   Color
 }
 
-func NewChess(players map[string]Color) *gameEngine {
-	engine := &gameEngine{
-		board:   newStandardBoard(),
-		kings:   make(map[Color]*Piece, 2),
-		players: players,
-		pieces:  map[Color][]*Piece{White: {}, Black: {}},
-		turn:    White,
+func NewEngine() *chessEngine {
+	engine := &chessEngine{
+		board:  newStandardBoard(),
+		kings:  make(map[Color]*Piece, 2),
+		pieces: map[Color][]*Piece{White: {}, Black: {}},
+		turn:   White,
 	}
 	engine.kings = map[Color]*Piece{
 		White: engine.board[0][4],
@@ -34,13 +32,12 @@ func NewChess(players map[string]Color) *gameEngine {
 
 	return engine
 }
-func NewChessFromPieces(players map[string]Color, pieces []*Piece) *gameEngine {
-	engine := &gameEngine{
-		board:   newBoardFromPieces(pieces),
-		kings:   map[Color]*Piece{White: nil, Black: nil},
-		pieces:  map[Color][]*Piece{White: {}, Black: {}},
-		players: players,
-		turn:    White,
+func NewFromPieces(pieces []*Piece) *chessEngine {
+	engine := &chessEngine{
+		board:  newBoardFromPieces(pieces),
+		kings:  map[Color]*Piece{White: nil, Black: nil},
+		pieces: map[Color][]*Piece{White: {}, Black: {}},
+		turn:   White,
 	}
 
 	for _, piece := range pieces {
@@ -51,9 +48,12 @@ func NewChessFromPieces(players map[string]Color, pieces []*Piece) *gameEngine {
 	}
 	return engine
 }
+func (g *chessEngine) IsFinished() bool {
+	return g.finished
+}
 
-func (g *gameEngine) Play(playerId string, move Move) error {
-	if g.ended {
+func (g *chessEngine) Play(playerColor Color, move Move) error {
+	if g.finished {
 		return ErrGameEnd
 	}
 
@@ -61,10 +61,6 @@ func (g *gameEngine) Play(playerId string, move Move) error {
 		return err
 	}
 
-	playerColor, found := g.players[playerId]
-	if !found {
-		return fmt.Errorf("player not found")
-	}
 	if playerColor != g.turn {
 		return ErrNotPlayersTurn
 	}
@@ -75,20 +71,62 @@ func (g *gameEngine) Play(playerId string, move Move) error {
 		return ErrInvalidPieceMove
 	}
 
-	if err := g.movePiece(playerColor, move.From, move.To); err != nil {
+	if err := g.movePiece(playerColor, move); err != nil {
 		return err
 	}
 	g.switchTurn()
 
 	if g.IsCheckmated() {
 		g.winner = g.turn.OppositeColor()
-		g.ended = true
-		return ErrGameEnd
+		g.finished = true
 	}
 	return nil
 }
 
-func (g *gameEngine) IsCheckmated() bool {
+type RollBackMovement struct {
+	game          *chessEngine
+	capturedPiece *Piece
+	move          Move
+	rolledBack    bool
+}
+
+func NewRollBack(game *chessEngine) *RollBackMovement {
+	return &RollBackMovement{
+		game: game,
+	}
+}
+
+func (r *RollBackMovement) Do(move Move) {
+	r.move = move
+
+	if r.game.board[move.To.Row][move.To.Col] != nil {
+		r.capturedPiece = r.game.board[move.To.Row][move.To.Col]
+		r.capturedPiece.Captured = true
+	}
+
+	r.game.board[move.To.Row][move.To.Col] = r.game.board[move.From.Row][move.From.Col]
+	r.game.board[move.From.Row][move.From.Col] = nil
+	r.game.board[move.To.Row][move.To.Col].Location.Col = move.To.Col
+	r.game.board[move.To.Row][move.To.Col].Location.Row = move.To.Row
+}
+
+func (r *RollBackMovement) RollBack() {
+	if r.rolledBack {
+		return
+	}
+
+	if r.capturedPiece != nil {
+		r.capturedPiece.Captured = false
+	}
+	r.game.board[r.move.From.Row][r.move.From.Col] = r.game.board[r.move.To.Row][r.move.To.Col]
+	r.game.board[r.move.To.Row][r.move.To.Col] = r.capturedPiece
+	r.game.board[r.move.From.Row][r.move.From.Col].Location.Col = r.move.From.Col
+	r.game.board[r.move.From.Row][r.move.From.Col].Location.Row = r.move.From.Row
+
+	r.rolledBack = true
+}
+
+func (g *chessEngine) IsCheckmated() bool {
 	king := g.kings[g.turn]
 	if !g.isChecked(king.Color) {
 		return false
@@ -109,29 +147,13 @@ func (g *gameEngine) IsCheckmated() bool {
 			continue
 		}
 		if g.isValidMove(king.Location, location) {
-			dst := location
-			src := king.Location
+			rb := NewRollBack(g)
 
-			var capturedPiece *Piece
-			if g.board[dst.Row][dst.Col] != nil {
-				capturedPiece = g.board[dst.Row][dst.Col]
-				capturedPiece.Captured = true
-			}
-
-			g.board[dst.Row][dst.Col] = g.board[src.Row][src.Col]
-			g.board[src.Row][src.Col] = nil
-
-			g.board[dst.Row][dst.Col].Location.Col = dst.Col
-			g.board[dst.Row][dst.Col].Location.Row = dst.Row
+			rb.Do(Move{From: king.Location, To: location})
 
 			isChecked := g.isChecked(king.Color)
-			if capturedPiece != nil {
-				capturedPiece.Captured = false
-			}
-			g.board[src.Row][src.Col] = g.board[dst.Row][dst.Col]
-			g.board[dst.Row][dst.Col] = capturedPiece
-			g.board[src.Row][src.Col].Location.Col = src.Col
-			g.board[src.Row][src.Col].Location.Row = src.Row
+
+			rb.RollBack()
 
 			if !isChecked {
 				return false
@@ -141,46 +163,14 @@ func (g *gameEngine) IsCheckmated() bool {
 	return true
 }
 
-func (g *gameEngine) Exit(playerId string) (Color, error) {
-	playerColor, found := g.players[playerId]
-	if !found {
-		return 0, fmt.Errorf("player with id %s not found", playerId)
-	}
-
-	return playerColor.OppositeColor(), nil
-}
-
-func (g *gameEngine) GetPlayers() []string {
-	var ids []string
-	for id := range g.players {
-		ids = append(ids, id)
-	}
-	return ids
-}
-
-func (g *gameEngine) GetWinner() Color {
-	if g.ended {
+func (g *chessEngine) GetWinner() Color {
+	if g.finished {
 		return g.winner
 	}
 	return Empty
 }
 
-func (g *gameEngine) GetPlayerByColor(color Color) string {
-	for player, playerColor := range g.players {
-		if playerColor == color {
-			return player
-		}
-	}
-	panic("invalid color")
-}
-func (g *gameEngine) InGame(playerId string) bool {
-	if _, found := g.players[playerId]; found {
-		return true
-	}
-	return false
-}
-
-func (g *gameEngine) Print() {
+func (g *chessEngine) Print() {
 	fmt.Println("########")
 	for i := 0; i < 8; i++ {
 		for j := 0; j < 8; j++ {
@@ -195,34 +185,18 @@ func (g *gameEngine) Print() {
 	fmt.Println("########")
 }
 
-func (g *gameEngine) movePiece(playerColor Color, src, dst Location) error {
-	var capturedPiece *Piece
-	if g.board[dst.Row][dst.Col] != nil {
-		capturedPiece = g.board[dst.Row][dst.Col]
-		capturedPiece.Captured = true
-	}
+func (g *chessEngine) movePiece(playerColor Color, move Move) error {
+	rb := NewRollBack(g)
 
-	g.board[dst.Row][dst.Col] = g.board[src.Row][src.Col]
-	g.board[src.Row][src.Col] = nil
-
-	g.board[dst.Row][dst.Col].Location.Col = dst.Col
-	g.board[dst.Row][dst.Col].Location.Row = dst.Row
-
-	// RoleBack
+	rb.Do(move)
 	if g.isChecked(playerColor) {
-		if capturedPiece != nil {
-			capturedPiece.Captured = false
-		}
-		g.board[src.Row][src.Col] = g.board[dst.Row][dst.Col]
-		g.board[dst.Row][dst.Col] = capturedPiece
-		g.board[src.Row][src.Col].Location.Col = src.Col
-		g.board[src.Row][src.Col].Location.Row = src.Row
+		rb.RollBack()
 		return ErrChecked
 	}
 
 	return nil
 }
-func (g *gameEngine) switchTurn() {
+func (g *chessEngine) switchTurn() {
 	if g.turn == White {
 		g.turn = Black
 	} else {
@@ -230,7 +204,7 @@ func (g *gameEngine) switchTurn() {
 	}
 }
 
-func (g *gameEngine) isChecked(color Color) bool {
+func (g *chessEngine) isChecked(color Color) bool {
 	king := g.kings[color]
 	if king == nil {
 		panic("king is not there")
@@ -245,7 +219,7 @@ func (g *gameEngine) isChecked(color Color) bool {
 	return false
 }
 
-func (g *gameEngine) isValidMove(src, dst Location) bool {
+func (g *chessEngine) isValidMove(src, dst Location) bool {
 	piece := g.board[src.Row][src.Col]
 	if piece == nil {
 		return false
@@ -274,7 +248,7 @@ func (g *gameEngine) isValidMove(src, dst Location) bool {
 	}
 }
 
-func (g *gameEngine) isValidKingMove(src, dst Location) bool {
+func (g *chessEngine) isValidKingMove(src, dst Location) bool {
 	return (src.Col == dst.Col &&
 		math.Abs(float64(src.Row)-float64(dst.Row)) == 1) ||
 		(src.Row == dst.Row &&
@@ -285,7 +259,7 @@ func (g *gameEngine) isValidKingMove(src, dst Location) bool {
 		(src.Col == dst.Col-1) && (src.Row == dst.Row-1)
 }
 
-func (g *gameEngine) isValidRookMove(src, dst Location) bool {
+func (g *chessEngine) isValidRookMove(src, dst Location) bool {
 	if src.Col == dst.Col && src.Row < dst.Row {
 		// Move down
 		for rowStep := src.Row + 1; rowStep < dst.Row; rowStep++ {
@@ -322,7 +296,7 @@ func (g *gameEngine) isValidRookMove(src, dst Location) bool {
 	return false
 }
 
-func (g *gameEngine) isValidBishopMove(src, dst Location) bool {
+func (g *chessEngine) isValidBishopMove(src, dst Location) bool {
 	if ((dst.Col - src.Col) == (dst.Row - src.Row)) && ((dst.Col - src.Col) > 0) {
 		// Move up-right
 		colStep := src.Col + 1
@@ -367,14 +341,14 @@ func (g *gameEngine) isValidBishopMove(src, dst Location) bool {
 	return false
 }
 
-func (g *gameEngine) isValidKnightMove(src, dst Location) bool {
+func (g *chessEngine) isValidKnightMove(src, dst Location) bool {
 	return dst.Row == src.Row+2 && math.Abs(float64(dst.Col-src.Col)) == 1 ||
 		dst.Row == src.Row-2 && math.Abs(float64(dst.Col-src.Col)) == 1 ||
 		dst.Col == src.Col+2 && math.Abs(float64(dst.Row-src.Row)) == 1 ||
 		dst.Col == src.Col-2 && math.Abs(float64(dst.Row-src.Row)) == 1
 }
 
-func (g *gameEngine) isValidPawnMove(src, dst Location) bool {
+func (g *chessEngine) isValidPawnMove(src, dst Location) bool {
 	if g.board[src.Row][src.Col].Color == White {
 		if src.Col == dst.Col && dst.Row == src.Row+1 && g.board[dst.Row][dst.Col] == nil {
 			return true

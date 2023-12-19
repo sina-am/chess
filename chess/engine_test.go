@@ -1,4 +1,4 @@
-package game
+package chess
 
 import (
 	"testing"
@@ -25,11 +25,11 @@ func TestCaptureOwnPiece(t *testing.T) {
 		},
 	}
 
-	game := NewChessFromPieces(map[string]Color{"player1": White, "player2": Black}, pieces)
+	game := NewFromPieces(pieces)
 
 	assert.ErrorIs(t,
 		game.Play(
-			"player1",
+			White,
 			Move{
 				From: Location{Row: 0, Col: 0},
 				To:   Location{Row: 1, Col: 0},
@@ -61,10 +61,10 @@ func TestCapturePiece(t *testing.T) {
 		},
 	}
 
-	game := NewChessFromPieces(map[string]Color{"player1": White, "player2": Black}, pieces)
+	game := NewFromPieces(pieces)
 
 	game.Play(
-		"player1",
+		White,
 		Move{
 			From: Location{Row: 6, Col: 0},
 			To:   Location{Row: 7, Col: 0},
@@ -97,11 +97,11 @@ func TestSomething(t *testing.T) {
 		},
 	}
 
-	game := NewChessFromPieces(map[string]Color{"player1": White, "player2": Black}, pieces)
+	game := NewFromPieces(pieces)
 
 	assert.Nil(t,
 		game.Play(
-			"player1",
+			White,
 			Move{
 				From: Location{Row: 6, Col: 0},
 				To:   Location{Row: 7, Col: 0},
@@ -137,12 +137,12 @@ func TestPinnedPiece(t *testing.T) {
 		},
 	}
 
-	game := NewChessFromPieces(map[string]Color{"player1": White, "player2": Black}, pieces)
+	game := NewFromPieces(pieces)
 
 	game.Print()
 	assert.ErrorIs(t,
 		game.Play(
-			"player1",
+			White,
 			Move{
 				From: Location{Row: 1, Col: 0},
 				To:   Location{Row: 1, Col: 1},
@@ -171,13 +171,13 @@ func TestKingMoveWhenIsChecked(t *testing.T) {
 		},
 	}
 
-	game := NewChessFromPieces(map[string]Color{"player1": White, "player2": Black}, pieces)
+	game := NewFromPieces(pieces)
 	game.Print()
 
 	t.Run("move to a place where king is checked", func(t *testing.T) {
 		assert.ErrorIs(t,
 			game.Play(
-				"player1",
+				White,
 				Move{
 					From: Location{Row: 0, Col: 0},
 					To:   Location{Row: 1, Col: 0},
@@ -189,7 +189,7 @@ func TestKingMoveWhenIsChecked(t *testing.T) {
 	t.Run("move to a safe squire", func(t *testing.T) {
 		assert.Nil(t,
 			game.Play(
-				"player1",
+				White,
 				Move{
 					From: Location{Row: 0, Col: 0},
 					To:   Location{Row: 1, Col: 1},
@@ -213,13 +213,13 @@ func TestKingCollisions(t *testing.T) {
 		},
 	}
 
-	game := NewChessFromPieces(map[string]Color{"player1": White, "player2": Black}, pieces)
+	game := NewFromPieces(pieces)
 	game.Print()
 
 	t.Run("move near king", func(t *testing.T) {
 		assert.ErrorIs(t,
 			game.Play(
-				"player1",
+				White,
 				Move{
 					From: Location{Row: 3, Col: 1},
 					To:   Location{Row: 3, Col: 2},
@@ -248,12 +248,12 @@ func TestKingCheckmate(t *testing.T) {
 		},
 	}
 
-	game := NewChessFromPieces(map[string]Color{"player1": White, "player2": Black}, pieces)
+	game := NewFromPieces(pieces)
 	game.Print()
 
 	t.Run("a touch of death", func(t *testing.T) {
 		assert.ErrorIs(t, game.Play(
-			"player1",
+			White,
 			Move{
 				From: Location{Row: 1, Col: 7},
 				To:   Location{Row: 1, Col: 1},

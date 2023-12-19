@@ -1,4 +1,4 @@
-package server
+package game
 
 import (
 	"encoding/json"
@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
-	"github.com/sina-am/chess/game"
+	"github.com/sina-am/chess/chess"
 )
 
 type PlayerStatus int
@@ -209,7 +209,7 @@ func (p *player) handleStart(msg message) error {
 }
 
 type PlayGameMessage struct {
-	Move game.Move `json:"move"`
+	Move chess.Move `json:"move"`
 }
 
 func (p *player) handlePlay(msg message) error {

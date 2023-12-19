@@ -1,17 +1,16 @@
-package server
+package game
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/sina-am/chess/game"
+	"github.com/sina-am/chess/chess"
 )
 
 type playMoveMsg struct {
 	player *player
 	gameId string
-	move   game.Move
+	move   chess.Move
 }
 
 type exitGameMsg struct {
@@ -25,7 +24,7 @@ type GameHandler interface {
 	Register(*player)
 	UnRegister(*player)
 
-	Play(player *player, gameId string, move game.Move)
+	Play(player *player, gameId string, move chess.Move)
 	ExitGame(gameId string, player *player)
 
 	AddToWaitList(p *player)
@@ -33,7 +32,7 @@ type GameHandler interface {
 }
 
 type gameHandler struct {
-	games   map[string]game.Chess
+	games   map[string]chess.Chess
 	players map[string]*player
 
 	waitList WaitList
@@ -48,7 +47,7 @@ type gameHandler struct {
 
 func NewGameHandler(wl WaitList) GameHandler {
 	h := &gameHandler{
-		games:   map[string]game.Chess{},
+		games:   map[string]chess.Chess{},
 		players: map[string]*player{},
 
 		waitList:       wl,
@@ -69,7 +68,7 @@ func (h *gameHandler) Register(p *player) {
 func (h *gameHandler) UnRegister(p *player) {
 	h.unregisterCh <- p
 }
-func (h *gameHandler) Play(player *player, gameId string, move game.Move) {
+func (h *gameHandler) Play(player *player, gameId string, move chess.Move) {
 	h.playMoveCh <- playMoveMsg{player: player, gameId: gameId, move: move}
 }
 func (h *gameHandler) ExitGame(gameId string, p *player) {
@@ -119,7 +118,20 @@ func (h *gameHandler) handleRegister(p *player) {
 	h.players[p.GetId()] = p
 }
 
-func (h *gameHandler) handlePlayerMove(p *player, move game.Move, gameId string) {
+func (h *gameHandler) publishGameFinished(g chess.Chess) {
+	color := g.GetWinner()
+	for _, playerId := range g.GetPlayers() {
+		if p, ok := h.players[playerId]; ok {
+			p.End <- endMsg{
+				Winner: color.String(),
+				Score:  10,
+				Reason: "Won",
+			}
+		}
+	}
+}
+
+func (h *gameHandler) handlePlayerMove(p *player, move chess.Move, gameId string) {
 	g, found := h.games[gameId]
 	if !found {
 		p.Err <- fmt.Errorf("game not found")
@@ -127,20 +139,7 @@ func (h *gameHandler) handlePlayerMove(p *player, move game.Move, gameId string)
 	}
 
 	if err := g.Play(p.GetId(), move); err != nil {
-		if errors.Is(err, game.ErrGameEnd) {
-			color := g.GetWinner()
-			for _, playerId := range g.GetPlayers() {
-				if p, ok := h.players[playerId]; ok {
-					p.End <- endMsg{
-						Winner: color.String(),
-						Score:  10,
-						Reason: "Won",
-					}
-				}
-			}
-		} else {
-			p.Err <- err
-		}
+		p.Err <- err
 		return
 	}
 
@@ -160,25 +159,28 @@ func (h *gameHandler) handlePlayerMove(p *player, move game.Move, gameId string)
 			}
 		}
 	}
+
+	if g.IsFinished() {
+		h.publishGameFinished(g)
+	}
 }
 
 func (h *gameHandler) startNewGame(p1, p2 *player) {
 	gameId := uuid.New().String()
-	g := game.NewChess(map[string]game.Color{
-		p1.GetId(): game.White,
-		p2.GetId(): game.Black,
-	})
+
+	g := chess.NewSession([]string{p1.GetId(), p2.GetId()})
+
 	h.games[gameId] = g
 
 	p1.Join <- joinMsg{
 		GameId:   gameId,
 		Opponent: p2.GetName(),
-		Color:    game.White.String(),
+		Color:    chess.White.String(),
 	}
 	p2.Join <- joinMsg{
 		GameId:   gameId,
 		Opponent: p1.GetName(),
-		Color:    game.Black.String(),
+		Color:    chess.Black.String(),
 	}
 }
 
