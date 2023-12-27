@@ -6,9 +6,10 @@
     <script src="js/engine.js" type="text/javascript"></script>
     <script src="js/ui.js" type="text/javascript"></script>
     <script src="js/game.js" type="text/javascript"></script>
-    <script src="js/index.js" type="text/javascript"></script>
+    <script src="js/websocket.js" type="text/javascript"></script>
     <link href="css/styles.css" rel="stylesheet" />
 
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <link rel="stylesheet" href="bootstrap/dist/css/bootstrap.min.css">
     <script src="bootstrap/dist/js/bootstrap.min.js"></script>
 
@@ -20,58 +21,59 @@
 </head>
 
 <body>
-    <div class="container">
-    <div class="row">
-        <button type="button" id="startStage" class="col-lg-2 col-md-4 col-sm-12 my-btn center" onclick="switchStage('optionMenu')">
-            <div id="waiting" class="d-none">
-                <strong role="status">Loading...</strong>
-                <div class="spinner-border ms-auto" aria-hidden="true"></div>
+    <div class="container" id="container">
+        <div class="mx-4 d-none" id="connection">
+            <div class="d-flex">
+                <input class="form-control col-10 mx-2" type="text" id="websocketAddress"
+                    placeholder="Websocket address">
+                <button class="btn btn-success col-2"
+                    onclick="makeConnection(document.getElementById('websocketAddress').value);">
+                    Connect to server
+                </button>
             </div>
-            <div id="startButton">Start new game</div>
-        </button>
-
-        <div class="col-lg-2 col-md-4 col-sm-12 center d-none" id="optionMenu">
-            <button class="my-btn" onclick="switchStage('gameModeSelected'); onGameStart(event);">Start</button>
-            <select class="form-select my-btn" aria-label="gameMenu" id="optionMenuSelect">
-                <option selected value="offline">Offline</option>
-                <option value="online">Online</option>
-            </select>
+            <p id="connectionMessage" class="alert alert-danger"></p>
+        </div>
+        <div class="row">
+            <button type="button" hx-get="/game-options" hx-target="#container"
+                class="col-lg-2 col-md-4 col-sm-12 my-btn center">
+                <div id="waiting" class="d-none">
+                    <strong role="status">Loading...</strong>
+                    <div class="spinner-border ms-auto" aria-hidden="true"></div>
+                </div>
+                <div id="startButton">Start new game</div>
+            </button>
         </div>
     </div>
-    <div class="modal fade" id="playerNameModal" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="exampleModalLabel">Who are you?</h5>
-                    <button type="button" class="btn btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <label for="playerNameInput" class="form-label">Name:</label>
-                    <input type="text" class="form-control" id="playerNameInput" placeholder="John" required>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" id="startGame" class="my-btn" data-bs-dismiss="modal" onclick="onGameStart(event)">Go</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div id="game" class="col-md-12 d-none">
-        <div id="gameBar" class="col-4" >
-            <label for="playerName">You: </label>
-            <span id="playerName"></span><br />
-            <label for="opponentName">Opponent: </label>
-            <span id="opponentName"></span>
-            <div id="gameWinner"></div>
-            <p style="color: red;" id="gameStatus">No winner</p>
-            <button id="exitBtn" class="my-btn">Exit game</button>
-        </div>
-        <div class="col-8">
-            <table id="gameBoard" class="board"></table>
-        </div>
-    </div>
-   </div> 
 </body>
 </body>
+<script type="text/javascript">
+    function displayElementById(id, display) {
+        if (display) {
+            document.getElementById(id).classList.remove('d-none');
+        } else {
+            document.getElementById(id).classList.add('d-none');
+        }
+    }
+
+    function makeConnection(addr) {
+        const ws = new WebSocket(addr);
+        ws.addEventListener("open", async (event) => {
+            console.log("websocket opened");
+            displayElementById("connection", false);
+        });
+        ws.addEventListener("close", async (event) => {
+            console.log("websocket closed");
+        });
+        ws.addEventListener("error", (event) => {
+            console.log("websocket error: ", event);
+            displayElementById("connection", true);
+            document.getElementById("connectionMessage").innerText = "Can't make a connection to server";
+        });
+
+        return ws;
+    }
+    const SERVER_ADDR = "ws://localhost:8080/ws";
+    const serverConnection = new ServerConnection(makeConnection(SERVER_ADDR));
+</script>
 
 </html>

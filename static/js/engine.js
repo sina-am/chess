@@ -75,8 +75,8 @@ class ChessEngine {
         this.turn = WHITE; 
         this.winner = null;
         this.castlingRight = new Map([[WHITE, true], [BLACK, true]])
-
         this.capturedPieces = new Map([[WHITE, []], [BLACK, []]])
+
         this.lastMove = {
             "piece": null,
             "from": null,
@@ -86,7 +86,6 @@ class ChessEngine {
 
         this.possibleMoves = {}
         this.findAllPossibleMoves()
-
     }
 
     isMyPiece(loc) {

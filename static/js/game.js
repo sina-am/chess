@@ -1,13 +1,14 @@
-class OfflineChess{
-    constructor(playerName, standardBoard) {
-        this.player = {name: playerName, color: null};
+class OfflineChess {
+    constructor(ui, playerName, standardBoard) {
+        this.player = { name: playerName, color: null };
         this.status = "started";
-        this.opponent = {name: "", color: null};
+        this.opponent = { name: "", color: null };
         this.board = standardBoard;
-
+        this.ui = ui;
     }
+
     async start() {
-        if(Math.random() > 0.5) {
+        if (Math.random() > 0.5) {
             this.player.color = "white";
             this.opponent.color = "black";
         } else {
@@ -15,20 +16,13 @@ class OfflineChess{
             this.opponent.color = "white";
         }
         this.engine = new ChessEngine(this.board, this.player.color);
-        this.ui = new ChessUI(
-            document.getElementById("gameBoard"), 
-            document.getElementById("playerName"), 
-            document.getElementById("opponentName"), 
-            this.board, 
-        );
-
         this.ui.setUp(this.player, this.opponent, this);
         this.status = "started";
         setGameState(this.status);
     }
     isMyPiece(location) {
-        if(this.board[location.row][location.col]) {
-            if(this.board[location.row][location.col].color === this.engine.turn) {
+        if (this.board[location.row][location.col]) {
+            if (this.board[location.row][location.col].color === this.engine.turn) {
                 return true;
             }
         }
@@ -38,14 +32,15 @@ class OfflineChess{
         return this.engine.winner;
     }
     play(from, to) {
-        if(!this.engine.movePiece(from, to)) {
+        if (!this.engine.movePiece(from, to)) {
             console.log("not your turn");
-            return
+            return false
         }
 
-        if(this.engine.winner) {
+        if (this.engine.winner) {
             this.gameOver();
         }
+        return true
     }
 
     gameOver() {
@@ -58,17 +53,18 @@ class OfflineChess{
     }
 }
 class OnlineChess {
-    constructor(ws, playerName, standardBoard) {
-        this.player = {name: playerName, color: null};
+    constructor(ui, playerName, standardBoard) {
+        this.player = { name: playerName, color: null };
         this.status = "waiting";
         this.opponent = {};
-        this.board = standardBoard; 
-        this.ws = ws;
-        this.ui = null;
+        this.board = standardBoard;
+        this.server = serverConnection;
+        this.ui = ui;
         this.winner = null;
-        ws.addEventListener("message", async (event) => {
-            this.update(JSON.parse(event.data))
-        });
+
+        this.server.addMessageHandler(async (event) => {
+            await this.update(JSON.parse(event.data))
+        })
     }
 
     onstart(msg) {
@@ -79,54 +75,49 @@ class OnlineChess {
         };
 
         this.engine = new ChessEngine(this.board, this.player.color);
-
-        this.ui = new ChessUI(
-            document.getElementById("gameBoard"), 
-            document.getElementById("playerName"), 
-            document.getElementById("opponentName"), 
-            this.board, 
-        );
-
         this.ui.setUp(this.player, this.opponent, this);
         this.status = "started";
         setGameState(this.status);
     }
 
     isMyPiece(location) {
-        if(this.board[location.row][location.col]) {
-            if(this.board[location.row][location.col].color === this.player.color) {
+        if (this.board[location.row][location.col]) {
+            if (this.board[location.row][location.col].color === this.player.color) {
                 return true;
             }
         }
         return false;
     }
     play(from, to) {
-        if (this.status !== "started") return;
+        if (this.status !== "started") return false;
 
-        if(!this.engine.movePiece(from, to)) {
-            console.log("not your turn");
-            return;
+        if (!this.engine.movePiece(from, to)) {
+            return false;
         }
-        this.ws.send(JSON.stringify({
+        this.server.send({
             "type": "play",
             "payload": {
-                "move": {from: from, to: to},
+                "move": { from: from, to: to },
             }
-        }));
+        });
+        return true
     }
 
-    update(msg) {
+    async update(msg) {
         switch (msg.type) {
             case "started":
-                this.onstart({name: msg.payload.opponent, color: msg.payload.tile}); 
+                this.onstart({ name: msg.payload.opponent, color: msg.payload.tile });
                 setGameState("started");
                 break;
             case "played":
                 this.engine.movePiece(
                     msg.payload.move.from,
                     msg.payload.move.to,
-                ) 
-                this.ui.render();
+                )
+                await this.ui.movePiece(
+                    msg.payload.move.from,
+                    msg.payload.move.to,
+                );
                 break;
             case "ended":
                 this.winner = msg.winner;
@@ -136,35 +127,36 @@ class OnlineChess {
                     document.getElementById('gameWinner').innerText = "You lost";
                 }
                 this.status = "finished";
-                this.ws.send(JSON.stringify({
+                this.server.send({
                     "type": "exit",
                     "payload": ""
-                }));
+                });
                 break;
             default:
                 break;
         }
         document.getElementById("gameStatus").innerText = this.status;
     }
-   
+
     hasWinner() {
         return this.winner;
     }
-    async start() {
-        this.ws.send(JSON.stringify({
+    start() {
+        this.server.send({
             "type": "start",
             "payload": {
                 "name": this.player.name,
             }
-        }));
+        });
     }
     exit() {
         this.status = "exited";
         setGameState(this.status)
-        this.ws.send(JSON.stringify({
+        this.server.send({
             "type": "exit",
             "payload": ""
-        }));
+        });
     }
 }
+
 
