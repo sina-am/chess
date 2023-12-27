@@ -1,0 +1,68 @@
+<div class="container">
+    <div id="loadingLogo">
+        <div class="spinner-border ms-auto" aria-hidden="true"></div>
+        <strong role="status">Loading...</strong>
+    </div>
+    <div id="game" class="d-none">
+        <div id="gameBar" class="col-4">
+            <label for="playerName">You: </label>
+            <span id="playerName"></span><br />
+            <label for="opponentName">Opponent: </label>
+            <span id="opponentName"></span>
+            <div id="gameWinner"></div>
+            <p style="color: red;" id="gameStatus">No winner</p>
+            <button id="exitBtn" class="my-btn">Exit game</button>
+        </div>
+        <table id="gameBoard" class="board"></table>
+    </div>
+</div>
+<script type="text/javascript">
+    function setGameState(state) {
+        switch (state) {
+            case "exited":
+                displayElementById("game", false);
+                displayElementById("loadingLogo", false);
+                break;
+            case "game over":
+                alert("Game is over")
+            case "waiting":
+                displayElementById("game", false);
+                displayElementById("loadingLogo", true);
+                break;
+            case "started":
+                displayElementById("loadingLogo", false);
+                displayElementById("game", true);
+                break;
+        }
+    }
+
+    function startGame(gameMode, playerName) {
+        console.log(gameMode, playerName);
+        const newChessSetup = structuredClone(chessSetup);
+        const ui = new ChessUI(
+            document.getElementById("gameBoard"), 
+            document.getElementById("playerName"), 
+            document.getElementById("opponentName"), 
+            document.getElementById("gameStatus"),
+            newChessSetup, 
+        );
+        if (gameMode === "online") {
+            const chess = new OnlineChess(ui, playerName, newChessSetup);
+            setGameState("waiting");
+            chess.start();
+            document.getElementById("exitBtn").onclick = (event) => {
+                chess.exit();
+                delete chess;
+            };
+        } else {
+            const chess = new OfflineChess(ui, "", newChessSetup);
+            setGameState("started");
+            chess.start();
+            document.getElementById("exitBtn").onclick = (event) => {
+                chess.exit();
+                delete chess;
+            };
+        }
+    }
+    startGame('{{.gameMode}}', '{{.playerName}}');
+</script>

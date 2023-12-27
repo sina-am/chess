@@ -1,6 +1,7 @@
 package game
 
 import (
+	"html/template"
 	"net/http"
 	"time"
 
@@ -10,8 +11,7 @@ import (
 )
 
 type service struct {
-	ws            *APIService
-	authenticator users.Authenticator
+	apis *APIService
 }
 
 type Config struct {
@@ -19,26 +19,34 @@ type Config struct {
 }
 
 func NewService(config Config) (*service, error) {
+	tmpl, err := template.ParseGlob("./services/game/templates/*")
+	if err != nil {
+		return nil, err
+	}
 	return &service{
-		ws: &APIService{
+		apis: &APIService{
 			WsUpgrader: websocket.Upgrader{
 				CheckOrigin:      func(r *http.Request) bool { return true },
 				HandshakeTimeout: time.Second * 3,
 				ReadBufferSize:   1024,
 				WriteBufferSize:  1024,
 			},
-			GameHandler: NewGameHandler(NewWaitList()),
+			GameHandler:   NewGameHandler(NewWaitList()),
+			Authenticator: config.Authenticator,
+			Template:      tmpl,
 		},
-		authenticator: config.Authenticator,
 	}, nil
 }
 
 func (s *service) Start() {
-	go s.ws.GameHandler.Start()
+	go s.apis.GameHandler.Start()
 }
 
 func (s *service) SetMiddlewares(e *echo.Echo) {
 }
 func (s *service) SetAPIs(e *echo.Echo) {
-	e.GET("/ws", s.ws.WebSocketAPI)
+	e.GET("/ws", s.apis.WebSocketAPI)
+	e.GET("/game-options", s.apis.GameOptions)
+	e.POST("/game-options", s.apis.GameOptions)
+	e.GET("/game", s.apis.StartGame)
 }

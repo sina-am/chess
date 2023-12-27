@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"time"
 
@@ -11,31 +12,33 @@ import (
 	"github.com/sina-am/chess/services/users"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"go.uber.org/zap"
 )
 
-func main() {
-	logger, _ := zap.NewProduction()
-	defer logger.Sync()
-
-	ctx := context.Background()
+func ConnectDatabase(ctx context.Context) (*mongo.Client, error) {
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://localhost").SetTimeout(3*time.Second))
+	if err != nil {
+		return nil, err
+	}
+
+	if err := client.Ping(ctx, nil); err != nil {
+		return nil, fmt.Errorf("database error: %s", err.Error())
+	}
+	return client, nil
+}
+func setupWithoutDatabase(e *echo.Echo) {
+	gameService, err := game.NewService(game.Config{
+		Authenticator: nil,
+	})
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	if err := client.Ping(ctx, nil); err != nil {
-		log.Fatalf("database error: %s", err.Error())
-	}
-	e := echo.New()
+	gameService.Start()
+	gameService.SetAPIs(e)
+	e.Logger.Warn("Running without database connection")
+}
 
-	// Middleware
-	e.Use(middleware.Logger())
-	e.Use(middleware.Recover())
-
-	// Routes
-	e.Static("/", "./static")
-
+func setupWithDatabase(e *echo.Echo, client *mongo.Client) {
 	userService, err := users.NewService(users.Config{
 		MongoClient: client,
 		DBName:      "users",
@@ -60,6 +63,23 @@ func main() {
 
 	gameService.Start()
 	gameService.SetAPIs(e)
+}
 
+func main() {
+	e := echo.New()
+	e.Logger.SetLevel(1)
+	// Middleware
+	e.Use(middleware.Logger())
+	e.Use(middleware.Recover())
+
+	// Routes
+	e.Static("/", "./static")
+
+	client, err := ConnectDatabase(context.Background())
+	if err != nil {
+		setupWithoutDatabase(e)
+	} else {
+		setupWithDatabase(e, client)
+	}
 	e.Logger.Fatal(e.Start(":8080"))
 }
