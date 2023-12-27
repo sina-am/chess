@@ -64,13 +64,16 @@ func (g *chessEngine) Play(playerColor Color, move Move) error {
 	if playerColor != g.turn {
 		return ErrNotPlayersTurn
 	}
-	if playerColor != g.board[move.From.Row][move.From.Col].Color {
-		return fmt.Errorf("it's not %s piece", playerColor.String())
-	}
+
 	if !g.isValidMove(move.From, move.To) {
 		return ErrInvalidPieceMove
 	}
-
+	if g.board[move.From.Row][move.From.Col] == nil {
+		return ErrInvalidPieceMove
+	}
+	if g.board[move.From.Row][move.From.Col].Color != playerColor {
+		return ErrInvalidPieceMove
+	}
 	if err := g.movePiece(playerColor, move); err != nil {
 		return err
 	}
@@ -88,6 +91,7 @@ type RollBackMovement struct {
 	capturedPiece *Piece
 	move          Move
 	rolledBack    bool
+	promoted      bool
 }
 
 func NewRollBack(game *chessEngine) *RollBackMovement {
@@ -96,6 +100,18 @@ func NewRollBack(game *chessEngine) *RollBackMovement {
 	}
 }
 
+func (r *RollBackMovement) CheckPromotion(move Move) {
+	piece := r.game.board[move.From.Row][move.From.Col]
+	if piece.Type == Pawn {
+		if piece.Color == Black && move.To.Row == 0 {
+			piece.Type = Queen
+			r.promoted = true
+		} else if move.To.Row == 7 {
+			piece.Type = Queen
+			r.promoted = true
+		}
+	}
+}
 func (r *RollBackMovement) Do(move Move) {
 	r.move = move
 
@@ -103,6 +119,8 @@ func (r *RollBackMovement) Do(move Move) {
 		r.capturedPiece = r.game.board[move.To.Row][move.To.Col]
 		r.capturedPiece.Captured = true
 	}
+
+	r.CheckPromotion(move)
 
 	r.game.board[move.To.Row][move.To.Col] = r.game.board[move.From.Row][move.From.Col]
 	r.game.board[move.From.Row][move.From.Col] = nil
@@ -118,12 +136,17 @@ func (r *RollBackMovement) RollBack() {
 	if r.capturedPiece != nil {
 		r.capturedPiece.Captured = false
 	}
+
 	r.game.board[r.move.From.Row][r.move.From.Col] = r.game.board[r.move.To.Row][r.move.To.Col]
 	r.game.board[r.move.To.Row][r.move.To.Col] = r.capturedPiece
 	r.game.board[r.move.From.Row][r.move.From.Col].Location.Col = r.move.From.Col
 	r.game.board[r.move.From.Row][r.move.From.Col].Location.Row = r.move.From.Row
 
+	if r.promoted {
+		r.game.board[r.move.From.Row][r.move.From.Col].Type = Pawn
+	}
 	r.rolledBack = true
+
 }
 
 func (g *chessEngine) IsCheckmated() bool {
@@ -221,9 +244,11 @@ func (g *chessEngine) isChecked(color Color) bool {
 
 func (g *chessEngine) isValidMove(src, dst Location) bool {
 	piece := g.board[src.Row][src.Col]
+
 	if piece == nil {
 		return false
 	}
+
 	if g.board[dst.Row][dst.Col] != nil {
 		if g.board[src.Row][src.Col].Color == g.board[dst.Row][dst.Col].Color {
 			return false
