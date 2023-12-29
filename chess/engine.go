@@ -5,13 +5,19 @@ import (
 	"math"
 )
 
+type castling struct {
+	left  bool
+	right bool
+}
+
 type chessEngine struct {
-	board    [8][8]*Piece
-	kings    map[Color]*Piece
-	pieces   map[Color][]*Piece
-	turn     Color
-	finished bool
-	winner   Color
+	board        [8][8]*Piece
+	kings        map[Color]*Piece
+	pieces       map[Color][]*Piece
+	castleRights map[Color]castling
+	turn         Color
+	finished     bool
+	winner       Color
 }
 
 func NewEngine() *chessEngine {
@@ -20,6 +26,16 @@ func NewEngine() *chessEngine {
 		kings:  make(map[Color]*Piece, 2),
 		pieces: map[Color][]*Piece{White: {}, Black: {}},
 		turn:   White,
+		castleRights: map[Color]castling{
+			White: {
+				left:  true,
+				right: true,
+			},
+			Black: {
+				left:  true,
+				right: true,
+			},
+		},
 	}
 	engine.kings = map[Color]*Piece{
 		White: engine.board[0][4],
@@ -38,6 +54,16 @@ func NewFromPieces(pieces []*Piece) *chessEngine {
 		kings:  map[Color]*Piece{White: nil, Black: nil},
 		pieces: map[Color][]*Piece{White: {}, Black: {}},
 		turn:   White,
+		castleRights: map[Color]castling{
+			White: {
+				left:  true,
+				right: true,
+			},
+			Black: {
+				left:  true,
+				right: true,
+			},
+		},
 	}
 
 	for _, piece := range pieces {
@@ -48,6 +74,7 @@ func NewFromPieces(pieces []*Piece) *chessEngine {
 	}
 	return engine
 }
+
 func (g *chessEngine) IsFinished() bool {
 	return g.finished
 }
@@ -90,6 +117,7 @@ type RollBackMovement struct {
 	game          *chessEngine
 	capturedPiece *Piece
 	move          Move
+	castled       bool
 	rolledBack    bool
 	promoted      bool
 }
@@ -112,8 +140,51 @@ func (r *RollBackMovement) CheckPromotion(move Move) {
 		}
 	}
 }
+func (r *RollBackMovement) isCastling() bool {
+	if (r.game.board[r.move.From.Row][r.move.From.Col].Type == King) && (math.Abs(float64(r.move.From.Col)-float64(r.move.To.Col)) == 2) {
+		return true
+	}
+	return false
+}
+
+func (r *RollBackMovement) doCastling() {
+	color := r.game.board[r.move.From.Row][r.move.From.Col].Color
+	backRow := 0
+	if color == Black {
+		backRow = 7
+	}
+
+	if r.move.To.Col == 6 {
+		r.game.castleRights[color] = castling{
+			left:  r.game.castleRights[color].left,
+			right: false,
+		}
+		r.game.board[backRow][5] = r.game.board[backRow][7]
+		r.game.board[backRow][6] = r.game.board[backRow][4]
+		r.game.board[backRow][4] = nil
+		r.game.board[backRow][7] = nil
+		return
+	}
+	if r.move.To.Col == 2 {
+		r.game.castleRights[color] = castling{
+			left:  false,
+			right: r.game.castleRights[color].right,
+		}
+		r.game.board[backRow][3] = r.game.board[backRow][0]
+		r.game.board[backRow][2] = r.game.board[backRow][4]
+		r.game.board[backRow][4] = nil
+		r.game.board[backRow][0] = nil
+	}
+}
+
 func (r *RollBackMovement) Do(move Move) {
 	r.move = move
+
+	if r.isCastling() {
+		r.doCastling()
+		r.castled = true
+		return
+	}
 
 	if r.game.board[move.To.Row][move.To.Col] != nil {
 		r.capturedPiece = r.game.board[move.To.Row][move.To.Col]
@@ -128,11 +199,38 @@ func (r *RollBackMovement) Do(move Move) {
 	r.game.board[move.To.Row][move.To.Col].Location.Row = move.To.Row
 }
 
+func (r *RollBackMovement) rollBackCastle() {
+	color := r.game.board[r.move.To.Row][r.move.To.Col].Color
+
+	r.game.board[r.move.To.Row][4] = r.game.board[r.move.To.Row][r.move.To.Col]
+	r.game.board[r.move.To.Row][r.move.To.Col] = nil
+	if r.move.To.Col == 2 {
+		r.game.board[r.move.To.Row][0] = r.game.board[r.move.From.Row][3]
+		r.game.board[r.move.To.Row][3] = nil
+		r.game.castleRights[color] = castling{
+			left:  true,
+			right: r.game.castleRights[color].right,
+		}
+	} else {
+		r.game.board[r.move.To.Row][7] = r.game.board[r.move.To.Row][5]
+		r.game.board[r.move.To.Row][5] = nil
+		r.game.castleRights[color] = castling{
+			left:  r.game.castleRights[color].left,
+			right: true,
+		}
+	}
+}
+
 func (r *RollBackMovement) RollBack() {
 	if r.rolledBack {
 		return
 	}
 
+	if r.castled {
+		r.rollBackCastle()
+		r.rolledBack = true
+		return
+	}
 	if r.capturedPiece != nil {
 		r.capturedPiece.Captured = false
 	}
@@ -146,7 +244,6 @@ func (r *RollBackMovement) RollBack() {
 		r.game.board[r.move.From.Row][r.move.From.Col].Type = Pawn
 	}
 	r.rolledBack = true
-
 }
 
 func (g *chessEngine) IsCheckmated() bool {
@@ -273,7 +370,46 @@ func (g *chessEngine) isValidMove(src, dst Location) bool {
 	}
 }
 
+func (g *chessEngine) isValidCastling(src, dst Location) bool {
+	color := g.board[src.Row][src.Col].Color
+	backRow := 0
+	if color == Black {
+		backRow = 7
+	}
+	if src.Row != backRow || dst.Row != backRow || src.Col != 4 {
+		return false
+	}
+	if src.Col == 4 && dst.Col == 6 {
+		// Left castle
+		if g.board[backRow][5] == nil && g.board[backRow][6] == nil {
+			if g.castleRights[color].left {
+				return true
+			} else {
+				return false
+			}
+		} else {
+			return false
+		}
+	} else if src.Col == 4 && dst.Col == 2 {
+		// Right castle
+		if g.board[backRow][3] == nil && g.board[backRow][2] == nil && g.board[backRow][1] == nil {
+			if g.castleRights[color].right {
+				return true
+			} else {
+				return false
+			}
+		}
+		return false
+	}
+	return false
+}
+
 func (g *chessEngine) isValidKingMove(src, dst Location) bool {
+	// Castling
+	if math.Abs(float64(src.Col)-float64(dst.Col)) == 2 && math.Abs(float64(src.Row)-float64(dst.Row)) == 0 {
+		return g.isValidCastling(src, dst)
+	}
+
 	return (src.Col == dst.Col &&
 		math.Abs(float64(src.Row)-float64(dst.Row)) == 1) ||
 		(src.Row == dst.Row &&
