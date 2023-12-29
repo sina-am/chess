@@ -1,13 +1,13 @@
 package game
 
 import (
-	"html/template"
 	"net/http"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/labstack/echo/v4"
 	"github.com/sina-am/chess/services/users"
+	"github.com/sina-am/chess/utils"
 )
 
 type service struct {
@@ -16,10 +16,11 @@ type service struct {
 
 type Config struct {
 	Authenticator users.Authenticator
+	Debug         bool
 }
 
 func NewService(config Config) (*service, error) {
-	tmpl, err := template.ParseGlob("./services/game/templates/*")
+	renderer, err := utils.NewTemplateRenderer(config.Debug, "./services/game/templates")
 	if err != nil {
 		return nil, err
 	}
@@ -33,7 +34,7 @@ func NewService(config Config) (*service, error) {
 			},
 			GameHandler:   NewGameHandler(NewWaitList()),
 			Authenticator: config.Authenticator,
-			Template:      tmpl,
+			Renderer:      renderer,
 		},
 	}, nil
 }
@@ -49,4 +50,5 @@ func (s *service) SetAPIs(e *echo.Echo) {
 	e.GET("/game-options", s.apis.GameOptions)
 	e.POST("/game-options", s.apis.GameOptions)
 	e.GET("/game", s.apis.StartGame)
+	e.GET("/", s.apis.Home)
 }
