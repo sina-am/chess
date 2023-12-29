@@ -28,11 +28,17 @@ class ChessUI {
         this.pickedPiece = null;
         this.board = board;
     }
-
-    async movePiece(from, to) {
-        document.getElementById(`squire-${from.row}-${from.col}`).innerHTML = "";
-        document.getElementById(`squire-${to.row}-${to.col}`).innerHTML =
-            await this.images.get(this.board[to.row][to.col].name, this.board[to.row][to.col].color);
+    async render() {
+        for(let i = 0; i < 8; i++) {
+            for(let j = 0; j < 8; j++) {
+                if(this.board[i][j] !== null) {
+                    document.getElementById(`squire-${i}-${j}`).innerHTML = 
+                        await this.images.get(this.board[i][j].name, this.board[i][j].color);
+                } else {
+                    document.getElementById(`squire-${i}-${j}`).innerHTML = "";
+                }
+            }
+        }
     }
 
     async squireClick(row, col) {
@@ -45,8 +51,9 @@ class ChessUI {
                 { row: this.pickedPiece.row, col: this.pickedPiece.col },
                 { row: row, col: col },
             );
+            console.log(played);
             if (played) {
-                this.movePiece(this.pickedPiece, {row: row, col: col});
+                await this.render();
             }
             document.getElementById(`squire-${this.pickedPiece.row}-${this.pickedPiece.col}`).classList.remove("picked");
             this.pickedPiece = null;
