@@ -37,53 +37,126 @@ function locationFromString(str) {
     return new BoardLocation(row, col)
 }
 
-class DummyEngine {
-    constructor(board) {
-        this.board = board;
+class Rollback {
+    constructor(engine) {
+        this.engine = engine;
+        this.capturedPiece = null;
+        this.castled = false;
+        this.promotedPawn = false;
     }
-    move(from, to) {
-        this.board[from.row][from.col] = this.board[to.row][to.col]; // for test
+
+    do(src, dst) {
+        this.move = {
+            'from': src,
+            'to': dst,
+        };
+
+        if (this.isCastling(src, dst)) {
+            this.doCastling(src, dst);
+            this.castled = true;
+            return;
+        }
+
+        if (this.engine.board[dst.row][dst.col]) {
+            this.capturedPiece = this.engine.board[dst.row][dst.col];
+        }
+        this.checkPawnPromotion(src, dst);
+
+        this.engine.board[dst.row][dst.col] = this.engine.board[src.row][src.col]
+        this.engine.board[src.row][src.col] = null
     }
-    isPieceMine(loc) {
-        if(this.board[loc.row][loc.col]) {
-            if(this.board[loc.row][loc.col].color === "white") {
-                return true;
+
+    rollback() {
+        if(this.castled) {
+            return this.rollbackCastling();
+        }
+        let src = this.move.from;
+        let dst = this.move.to;
+        this.engine.board[src.row][src.col] = this.engine.board[dst.row][dst.col];
+        this.engine.board[dst.row][dst.col] = this.capturedPiece;
+
+        if (this.promotedPawn) {
+            this.engine.board[src.row][src.col].name = PAWN; 
+        }
+    }
+
+    checkPawnPromotion(src, dst) {
+        let piece = this.engine.board[src.row][src.col]
+        if(piece.name === PAWN) {
+            if (piece.color === BLACK && dst.row === 0) {
+                this.engine.board[src.row][src.col].name = QUEEN; 
+                this.promotedPawn = true;
+            } else if (dst.row === 7) {
+                this.engine.board[src.row][src.col].name = QUEEN;
+                this.promotedPawn = true;
             }
         }
-        return false;
     }
-}
 
-function getEmptyBoard() {
-    const board = [];
-    for(let i = 0; i < 8; i++){
-        board.push([]);
-        for(let j = 0; j < 8; j++) {
-            board[i].push(null);
+    isCastling(src, dst) {
+        return this.engine.board[src.row][src.col].name === KING && Math.abs(src.col - dst.col) === 2
+    }
+
+    doCastling(src, dst) {
+        if(src.col > dst.col) {
+            this.doLeftCasting(src, dst);
+        } else {
+            this.doRightCastling(src, dst);
         }
     }
-    board[0][0] = chessSetup[0][4]
-    board[0][6] = chessSetup[0][3]
-    board[7][7] = chessSetup[7][4]
-    return board;
-}
+    
+    doLeftCasting(src, dst) {
+        this.engine.board[dst.row][dst.col] = this.engine.board[src.row][src.col];
+        this.engine.board[src.row][src.col] = null;
+        this.engine.board[dst.row][dst.col + 1] = this.engine.board[src.row][0];
+        this.engine.board[src.row][0] = null;
+    }
+    doRightCastling(src, dst) {
+        this.engine.board[dst.row][dst.col] = this.engine.board[src.row][src.col];
+        this.engine.board[src.row][src.col] = null;
+        this.engine.board[dst.row][dst.col - 1] = this.engine.board[src.row][7];
+        this.engine.board[src.row][7] = null;
+    }
 
+    rollbackCastling() {
+        let src = this.move.from;
+        let dst = this.move.to;
+        if(src.col > dst.col) {
+            this.rollbackLeftCastling(src, dst);
+        } else {
+            this.rollbackRightCastling(src, dst);
+        }
+    }
+
+    rollbackLeftCastling(src, dst) {
+        this.engine.board[src.row][src.col] = this.engine.board[dst.row][dst.col];
+        this.engine.board[dst.row][dst.col] = null;
+        this.engine.board[src.row][0] = this.engine.board[dst.row][dst.col + 1];
+        this.engine.board[dst.row][dst.col + 1] = null;
+    }
+    rollbackRightCastling(src, dst) {
+        this.engine.board[src.row][src.col] = this.engine.board[dst.row][dst.col];
+        this.engine.board[dst.row][dst.col] = null;
+        this.engine.board[src.row][7] = this.engine.board[dst.row][dst.col - 1];
+        this.engine.board[dst.row][dst.col - 1] = null;
+    }
+}
 class ChessEngine {
     constructor(board, color) {
         this.board = board;
         this.myColor = color 
         this.turn = WHITE; 
         this.winner = null;
-        this.castlingRight = new Map([[WHITE, true], [BLACK, true]])
-        this.capturedPieces = new Map([[WHITE, []], [BLACK, []]])
-
-        this.lastMove = {
-            "piece": null,
-            "from": null,
-            "to": null,
-            "capturedPiece": null
+        this.castlingRight = {
+            white: {
+                left: true,
+                right: true,
+            },
+            black: {
+                left: true,
+                right: true,
+            },
         }
-
         this.possibleMoves = {}
         this.findAllPossibleMoves()
     }
@@ -144,6 +217,58 @@ class ChessEngine {
             }
         }
     }
+    // Entry
+    movePiece(from, to) {
+        let src = new BoardLocation(from.row, from.col);
+        let dst = new BoardLocation(to.row, to.col);
+
+        if (this.turn !== this.board[src.row][src.col]?.color) {
+            return false
+        }
+        if (this.winner) {
+            throw "game is over";
+        }
+        if (this.possibleMoves[src.toString()].find(loc => loc.compare(dst))) {
+            if (this.move(src, dst)) {
+                this.switchTurn()
+                if(!this.hasMove()) {
+                    console.log("no move remains"); 
+                    this.winner = oppositeColor(this.turn); 
+                }
+                return true
+            }
+        }
+        return false
+    }
+
+    haveCastleRight(color) {
+        return this.castlingRight[color].left || this.castlingRight[color].right;
+    }
+    updateCastleRights(src, movedPiece) {
+        if(movedPiece.name === KING)  {
+            this.castlingRight[movedPiece.color].left = false
+            this.castlingRight[movedPiece.color].right = false
+        } else if (movedPiece.name === ROOK) {
+            if(src.col === 0) {
+                // First time moving left side rook
+                this.castlingRight[movedPiece.color].left = false; 
+            } else if(src.col === 7) {
+                // First time moving right side rook
+                this.castlingRight[movedPiece.color].right = false; 
+            }
+        }
+    }
+    move(src, dst) {
+        const rollback = new Rollback(this);
+        rollback.do(src, dst);
+
+        let movedPiece = this.board[dst.row][dst.col];
+        if (this.haveCastleRight(movedPiece.color)) {
+            this.updateCastleRights(src, movedPiece);
+        } 
+        
+        return true
+    }
     /* Reevaluates pieces and their possible moves */
     findAllPossibleMoves() {
         this.possibleMoves = {}
@@ -164,63 +289,17 @@ class ChessEngine {
             newPossibleMoves[srcKey] = []
 
             this.possibleMoves[srcKey].forEach(dst => {
-                // castling
-                if(this.board[src.row][src.col].name === KING && Math.abs(src.col - dst.col) === 2) {
-                    if(src.col > dst.col) {
-                        // left castling
-                        this.board[dst.row][dst.col] = this.board[src.row][src.col];
-                        this.board[src.row][src.col] = null;
-                        this.board[dst.row][dst.col + 1] = this.board[src.row][0];
-                        this.board[src.row][0] = null;
-                    } else {
-                        // right castling
-                        this.board[dst.row][dst.col] = this.board[src.row][src.col];
-                        this.board[src.row][src.col] = null;
-                        this.board[dst.row][dst.col - 1] = this.board[src.row][7];
-                        this.board[src.row][7] = null;
-                    }
+                const rollback = new Rollback(this);
+                rollback.do(src, dst)
+                if(this.board[dst.row][dst.col].name === KING) {
                     if(!this.isCheckable(new BoardLocation(dst.row, dst.col))) {
                         newPossibleMoves[srcKey].push(dst)
                     }
-                    // undo
-                    if(src.col > dst.col) {
-                        // left castling
-                        this.board[src.row][src.col] = this.board[dst.row][dst.col];
-                        this.board[dst.row][dst.col] = null;
-                        this.board[src.row][0] = this.board[dst.row][dst.col + 1];
-                        this.board[dst.row][dst.col + 1] = null;
-                    } else {
-                        // right castling
-                        this.board[src.row][src.col] = this.board[dst.row][dst.col];
-                        this.board[dst.row][dst.col] = null;
-                        this.board[src.row][7] = this.board[dst.row][dst.col - 1];
-                        this.board[dst.row][dst.col - 1] = null;
-                    }
-                } else {
-                    let capturedPiece = null
-
-                    if (this.isOpponentPiece(this.board[src.row][src.col], dst)) {
-                        capturedPiece = this.board[dst.row][dst.col];
-                    }
-                    this.board[dst.row][dst.col] = this.board[src.row][src.col]
-                    this.board[src.row][src.col] = null
-                
-                    if(this.board[dst.row][dst.col].name === KING) {
-                        if(!this.isCheckable(new BoardLocation(dst.row, dst.col))) {
-                            newPossibleMoves[srcKey].push(dst)
-                        }
-                    }
-                    else if(!this.isCheckable(kingLocation)){ 
-                        newPossibleMoves[srcKey].push(dst)
-                    }
-
-                    this.board[src.row][src.col] = this.board[dst.row][dst.col]
-                    if (capturedPiece) {
-                        this.board[dst.row][dst.col] = capturedPiece 
-                    } else {
-                        this.board[dst.row][dst.col] = null 
-                    }
                 }
+                else if(!this.isCheckable(kingLocation)){ 
+                    newPossibleMoves[srcKey].push(dst)
+                }
+                rollback.rollback()
             });
         });
 
@@ -280,30 +359,16 @@ class ChessEngine {
             }
         })
 
-        if (this.castlingRight.get(piece.color)) {
-            let leftCastling = true;
-            for (let j = location.col - 1; j > 0; j--) {
-                if (this.board[location.row][j]) {
-                    leftCastling = false
-                    break
-                }
-            }
-            if (leftCastling) {
+        if(this.castlingRight[piece.color].left) {
+            if(!this.board[location.row][3] && !this.board[location.row][2] && !this.board[location.row][1]) {
                 possibleMoves.push(new BoardLocation(location.row, location.col - 2))
             }
-
-            let rightCastling = true;
-            for (let j = location.col + 1; j < 7; j++) {
-                if (this.board[location.row][j]) {
-                    rightCastling = false
-                    break
-                }
-            }
-            if (rightCastling) {
+        }
+        if(this.castlingRight[piece.color].right) {
+            if(!this.board[location.row][5] && !this.board[location.row][6]) {
                 possibleMoves.push(new BoardLocation(location.row, location.col + 2))
             }
         }
-
         return possibleMoves
     }
 
@@ -457,74 +522,6 @@ class ChessEngine {
         ]
     }
 
-    movePiece(from, to) {
-        let src = new BoardLocation(from.row, from.col);
-        let dst = new BoardLocation(to.row, to.col);
-
-        if (this.turn !== this.board[src.row][src.col]?.color) {
-            return false
-        }
-        if (this.winner) {
-            throw "game is over";
-        }
-        if (this.possibleMoves[src.toString()].find(loc => loc.compare(dst))) {
-            if (this.move(src, dst)) {
-                this.switchTurn()
-                if(!this.hasMove()) {
-                    console.log("no move remains"); 
-                    
-                    this.winner = oppositeColor(this.turn); 
-                }
-                return true
-            }
-        }
-        return false
-    }
-
-    isCastleMove(src, dst) {
-        return (this.board[src.row][src.col].name === KING) && (Math.abs(src.col - dst.col) === 2)
-    }
-
-    castleMove(src, dst) {
-         if(src.col > dst.col) {
-            // left castling
-            this.board[dst.row][dst.col] = this.board[src.row][src.col];
-            this.board[src.row][src.col] = null;
-            this.board[dst.row][dst.col + 1] = this.board[src.row][0];
-            this.board[src.row][0] = null;
-            } else {
-                // right castling
-                this.board[dst.row][dst.col] = this.board[src.row][src.col];
-                this.board[src.row][src.col] = null;
-                this.board[dst.row][dst.col - 1] = this.board[src.row][7];
-                this.board[src.row][7] = null;
-            }
-    }
-    move(src, dst) {
-        this.lastMove.piece = this.board[src.row][src.col]
-        this.lastMove.from = new BoardLocation(src.row, src.col)
-        this.lastMove.to = new BoardLocation(dst.row, dst.col)
-
-        if(this.isCastleMove(src, dst)) {
-            this.castleMove(src, dst);
-            return true;
-        }
-
-        if (this.isOpponentPiece(this.board[src.row][src.col], dst)) {
-            // TODO: make this clean
-            this.lastMove.capturedPiece = this.board[dst.row][dst.col]
-            this.capturedPieces.set(this.board[dst.row][dst.col].color, [this.board[dst.row][dst.col], ...this.capturedPieces.get(this.board[dst.row][dst.col].color)])
-            this.board[dst.row][dst.col] = null;
-        }
-        this.board[dst.row][dst.col] = this.board[src.row][src.col]
-        this.board[src.row][src.col] = null
-
-        if(this.board[dst.row][dst.col].name === KING)  {
-            this.castlingRight.set(this.board[dst.row][dst.col].color, false);
-        }
-        
-        return true
-    }
     validMove(src, dst) {
         switch(this.board[src.row][src.col].name) {
             case QUEEN:

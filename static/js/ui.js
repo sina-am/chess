@@ -72,22 +72,33 @@ class ChessUI {
         this.ctx.fillStyle = color;
         this.ctx.fillRect(x * SQUIRE_SIZE, y * SQUIRE_SIZE, SQUIRE_SIZE, SQUIRE_SIZE);
     }
+    loadImage(x, y, piece) {
+        let ctx = this.ctx;
+        piece.image = new Image();
+        piece.image.src = IMAGE_LINK + `${piece.name}-${piece.color}.svg`;
+        piece.image.onload = () => {
+            piece.image.width = SQUIRE_SIZE;
+            piece.image.height = SQUIRE_SIZE;
+            piece.image.setAttribute("name", piece.name);
+            piece.image.setAttribute("color", piece.color);
+
+            ctx.drawImage(piece.image, x * SQUIRE_SIZE, y * SQUIRE_SIZE, piece.image.width, piece.image.height); 
+        }
+    }
     async drawPiece(x, y, piece) {
         this.ctx.fillStyle = piece.color === "white" ? "#fff" : "#000";
 
         let ctx = this.ctx;
-        if(piece?.image) {
-            ctx.drawImage(piece.image, x * SQUIRE_SIZE, y * SQUIRE_SIZE, piece.image.width, piece.image.height); 
-        } else {
-            piece.image = new Image();
-            piece.image.src = IMAGE_LINK + `${piece.name}-${piece.color}.svg`;
-            piece.image.onload = () => {
-                piece.image.width = SQUIRE_SIZE;
-                piece.image.height = SQUIRE_SIZE;
-
-                ctx.drawImage(piece.image, x * SQUIRE_SIZE, y * SQUIRE_SIZE, piece.image.width, piece.image.height); 
-            }
+        if(!piece?.image) {
+            this.loadImage(x, y, piece);
+            return;
         }
+        if(piece.image.getAttribute("name") !== piece.name) {
+            // Pawn promotion
+            this.loadImage(x, y, piece);
+            return;
+        } 
+        ctx.drawImage(piece.image, x * SQUIRE_SIZE, y * SQUIRE_SIZE, piece.image.width, piece.image.height); 
     }
     async changeBackground(x, y, color) {
         this.drawSquire(x, y, color);
@@ -124,7 +135,6 @@ class ChessUI {
                         "piece": this.board[y][x],
                         "location": {x: x, y: y},
                     }
-                    console.log("picked", this.pickedPiece);
                 } 
             } else {
                 await this.changeBackground(
@@ -148,7 +158,6 @@ class ChessUI {
                 )
                 if(played) {
                     await this.render();
-                    console.log("played");
                 } else {
                     console.log("invalid play")
                 }

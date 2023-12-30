@@ -53,8 +53,9 @@ class OfflineChess {
     }
 }
 class OnlineChess {
-    constructor(ui, playerName, standardBoard, serverConnection) {
+    constructor(ui, playerName, standardBoard, serverConnection, gameDuration) {
         this.player = { name: playerName, color: null };
+        this.duration = gameDuration
         this.status = "waiting";
         this.opponent = {};
         this.board = standardBoard;
@@ -144,6 +145,7 @@ class OnlineChess {
                 "type": "start",
                 "payload": {
                     "name": this.player.name,
+                    "duration": this.duration,
                 }
             });
         })
