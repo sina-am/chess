@@ -1,121 +1,160 @@
-class PieceImages {
-    constructor() {
-        this.images = new Map();
-    }
+const BOARD_SIZE = 600;
+const SQUIRE_SIZE = BOARD_SIZE / 8;
+const WHITE_COLOR = '#e9edcc';
+const BLACK_COLOR = '#779954';
+const SELECTED_SQUIRE_COLOR = "#f4f67e";
+const IMAGE_LINK = "static/img/pieces/";
 
-    async fetch(name, color) {
-        return await (await fetch(`img/pieces/${name}-${color}.svg`)).text();
-    }
-    async get(name, color) {
-        const cached = this.images.get(`${name}-${color}`);
-        if (cached) {
-            return cached;
+
+function getSquireColor(x, y) {
+    if (y % 2 === 0) {
+        if (x % 2 === 0) {
+            return BLACK_COLOR;
+        } else {
+            return WHITE_COLOR;
         }
-
-        const image = await this.fetch(name, color);
-        this.images.set(`${name}-${color}`, image);
-        return image;
+    } else {
+        if (x % 2 === 0) {
+            return WHITE_COLOR;
+        } else {
+            return BLACK_COLOR;
+        }
     }
 }
 
 class ChessUI {
     constructor(boardElem, playerElem, opponentElem, gameStatusElem, board) {
-        this.images = new PieceImages();
-        this.boardElem = boardElem;
+        this.canvas = document.createElement("canvas");
+        this.canvas.width = BOARD_SIZE;
+        this.canvas.height = BOARD_SIZE
+        boardElem.appendChild(this.canvas)
+
+        this.ctx = this.canvas.getContext("2d");
+        this.board = board;
+        this.pickedPiece = null;
+        this.visitedSquire = null;
+        this.last_click = 0;
+
         this.playerElem = playerElem;
         this.opponentElem = opponentElem;
         this.gameStatusElem = gameStatusElem
-        this.pickedPiece = null;
-        this.board = board;
     }
-    async render() {
-        for(let i = 0; i < 8; i++) {
-            for(let j = 0; j < 8; j++) {
-                if(this.board[i][j] !== null) {
-                    document.getElementById(`squire-${i}-${j}`).innerHTML = 
-                        await this.images.get(this.board[i][j].name, this.board[i][j].color);
-                } else {
-                    document.getElementById(`squire-${i}-${j}`).innerHTML = "";
-                }
-            }
-        }
-    }
-
-    async squireClick(row, col) {
-        if (this.pickedPiece == null) {
-            if (!this.game.isMyPiece({ row: row, col: col })) return;
-            this.pickedPiece = { row: row, col: col };
-            document.getElementById(`squire-${row}-${col}`).classList.add("picked");
-        } else {
-            const played = this.game.play(
-                { row: this.pickedPiece.row, col: this.pickedPiece.col },
-                { row: row, col: col },
-            );
-            console.log(played);
-            if (played) {
-                await this.render();
-            }
-            document.getElementById(`squire-${this.pickedPiece.row}-${this.pickedPiece.col}`).classList.remove("picked");
-            this.pickedPiece = null;
-            const winner = this.game.hasWinner();
-            if (winner) {
-                this.gameOver(winner);
-            }
-
-        }
-    }
-
-    gameOver(winner) {
-        this.gameStatusElem.innerText = `winner is ${winner}`;
-    }
-
     async setUp(player, opponent, game) {
         this.game = game;
         await this.setUpBoard();
+        this.setUpHandlers();
         await this.setUpBar(player, opponent);
     }
+
     async setUpBar(player, opponent) {
         this.playerElem.innerText = player.name + " " + player.color;
         this.opponentElem.innerText = opponent.name + " " + opponent.color;
     }
 
-    async setUpBoard() {
-        if (this.boardElem.firstChild) {
-            for (let i = 0; i < 8; i++) {
-                for (let j = 0; j < 8; j++) {
-                    const squire = document.getElementById(`squire-${i}-${j}`);
-                    squire.onclick = async (event) => {
-                        this.squireClick(i, j);
-                    };
-                    if (this.board[i][j] !== null) {
-                        squire.innerHTML =
-                            await this.images.get(this.board[i][j].name, this.board[i][j].color);
-                    } else {
-                        squire.innerHTML = "";
-                    }
+    async render() {
+        this.ctx.reset()
+        for (let x = 0; x < 8; x++) {
+            for (let y = 0; y < 8; y++) {
+                this.drawSquire(x, y, getSquireColor(x, y));
+                let piece = this.board[y][x]
+                if (piece) {
+                    await this.drawPiece(x, y, piece);
                 }
             }
-            return;
         }
-        for (let i = 0; i < 8; i++) {
-            const row = document.createElement("tr");
-            for (let j = 0; j < 8; j++) {
-                const squire = document.createElement("td");
-                squire.id = `squire-${i}-${j}`;
-                squire.onclick = async (event) => {
-                    this.squireClick(i, j);
-                };
-                if (this.board[i][j] !== null) {
-                    squire.innerHTML =
-                        await this.images.get(this.board[i][j].name, this.board[i][j].color);
+        this.isFirstRender = false
+    }
+    async setUpBoard() {
+        await this.render();
+    }
+
+    drawSquire(x, y, color) {
+        this.ctx.fillStyle = color;
+        this.ctx.fillRect(x * SQUIRE_SIZE, y * SQUIRE_SIZE, SQUIRE_SIZE, SQUIRE_SIZE);
+    }
+    async drawPiece(x, y, piece) {
+        this.ctx.fillStyle = piece.color === "white" ? "#fff" : "#000";
+
+        let ctx = this.ctx;
+        if(piece?.image) {
+            ctx.drawImage(piece.image, x * SQUIRE_SIZE, y * SQUIRE_SIZE, piece.image.width, piece.image.height); 
+        } else {
+            piece.image = new Image();
+            piece.image.src = IMAGE_LINK + `${piece.name}-${piece.color}.svg`;
+            piece.image.onload = () => {
+                piece.image.width = SQUIRE_SIZE;
+                piece.image.height = SQUIRE_SIZE;
+
+                ctx.drawImage(piece.image, x * SQUIRE_SIZE, y * SQUIRE_SIZE, piece.image.width, piece.image.height); 
+            }
+        }
+    }
+    async changeBackground(x, y, color) {
+        this.drawSquire(x, y, color);
+        await this.drawPiece(x, y, this.board[y][x])
+    }
+    gameOver(winner) {
+        this.gameStatusElem.innerText = `winner is ${winner}`;
+    }
+
+    isClicked() {
+        if((Date.now() - this.last_click) < 10) {
+            return false
+        }
+        this.last_click = Date.now()
+        return true;
+    }
+
+    setUpHandlers() {
+        this.canvas.addEventListener("click", async (event) => {
+            if(!this.isClicked()) {
+                return;
+            }
+
+            if (this.pickedPiece === null) {
+                const rect = this.canvas.getBoundingClientRect();
+                let x = Math.floor((event.clientX - rect.x) / SQUIRE_SIZE)
+                let y = Math.floor((event.clientY - rect.y) / SQUIRE_SIZE)
+                if(x < 0 || x > 7 || y < 0 || y > 7) {
+                    return ;
+                }
+                if(this.game.isMyPiece({row: y, col: x})) {
+                    await this.changeBackground(x, y, SELECTED_SQUIRE_COLOR)
+                    this.pickedPiece = {
+                        "piece": this.board[y][x],
+                        "location": {x: x, y: y},
+                    }
+                    console.log("picked", this.pickedPiece);
+                } 
+            } else {
+                await this.changeBackground(
+                    this.pickedPiece.location.x, 
+                    this.pickedPiece.location.y,
+                    getSquireColor(
+                        this.pickedPiece.location.x,
+                        this.pickedPiece.location.y,
+                    ),
+                )
+                const rect = this.canvas.getBoundingClientRect();
+                let x = Math.floor((event.clientX - rect.x) / SQUIRE_SIZE)
+                let y = Math.floor((event.clientY - rect.y) / SQUIRE_SIZE)
+                if(x < 0 || x > 7 || y < 0 || y > 7) {
+                    this.pickedPiece = null;
+                    return ;
+                }
+                const played = this.game.play(
+                    { row: this.pickedPiece.location.y, col: this.pickedPiece.location.x },
+                    { row: y, col: x },
+                )
+                if(played) {
+                    await this.render();
+                    console.log("played");
                 } else {
-                    squire.innerHTML = "";
+                    console.log("invalid play")
                 }
 
-                squire.classList.add("squire");
-                row.appendChild(squire);
+                this.pickedPiece = null;
             }
-            this.boardElem.appendChild(row);
-        }
+        });
     }
 }

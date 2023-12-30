@@ -53,7 +53,7 @@ class OfflineChess {
     }
 }
 class OnlineChess {
-    constructor(ui, playerName, standardBoard) {
+    constructor(ui, playerName, standardBoard, serverConnection) {
         this.player = { name: playerName, color: null };
         this.status = "waiting";
         this.opponent = {};
@@ -114,10 +114,7 @@ class OnlineChess {
                     msg.payload.move.from,
                     msg.payload.move.to,
                 )
-                await this.ui.movePiece(
-                    msg.payload.move.from,
-                    msg.payload.move.to,
-                );
+                await this.ui.render();
                 break;
             case "ended":
                 this.winner = msg.winner;
@@ -142,12 +139,14 @@ class OnlineChess {
         return this.winner;
     }
     start() {
-        this.server.send({
-            "type": "start",
-            "payload": {
-                "name": this.player.name,
-            }
-        });
+        this.server.ws.addEventListener("open", (event) => {
+            this.server.send({
+                "type": "start",
+                "payload": {
+                    "name": this.player.name,
+                }
+            });
+        })
     }
     exit() {
         this.status = "exited";

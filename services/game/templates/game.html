@@ -1,27 +1,73 @@
-<div class="container">
+{{ define "content"}}
+<div class="container-fluid">
     <div id="loadingLogo">
         <div class="spinner-border ms-auto" aria-hidden="true"></div>
         <strong role="status">Loading...</strong>
     </div>
-    <div id="game" class="d-none">
-        <div id="gameBar" class="col-4">
-            <label for="playerName">You: </label>
-            <span id="playerName"></span><br />
-            <label for="opponentName">Opponent: </label>
-            <span id="opponentName"></span>
+    <div class="d-flex flex-row  d-none" id="game">
+        <div class="col-8">
+            <div id="gameBar" class="col-4">
+                <div class="d-flex flex-start align-items-center mb-2">
+                    <img class="rounded-circle shadow-1-strong me-3" src="static/img/profile-icon.gif" alt="avatar"
+                        width="40" height="40">
+                    <div>
+                        <h6 class="fw-bold text-success mb-1" id="opponentName"></h6>
+                    </div>
+                </div>
+            </div>
+            <div id="chessBoard"></div>
+            <div class="d-flex flex-start align-items-center mt-2">
+                <img class="rounded-circle shadow-1-strong me-3" src="static/img/profile-icon.gif" alt="avatar"
+                    width="40" height="40">
+                <div>
+                    <h6 class="fw-bold text-success mb-1" id="playerName"></h6>
+                </div>
+            </div>
+        </div>
+        <div class="col-4">
             <div id="gameWinner"></div>
             <p style="color: red;" id="gameStatus">No winner</p>
-            <button id="exitBtn" class="my-btn">Exit game</button>
+            <button id="exitBtn" class="btn btn-danger">Resign</button>
         </div>
-        <table id="gameBoard" class="board"></table>
     </div>
 </div>
+
+<script src="static/js/engine.js" type="text/javascript"></script>
+<script src="static/js/game.js" type="text/javascript"></script>
+<script src="static/js/websocket.js" type="text/javascript"></script>
+<script src="static/js/ui.js" type="text/javascript"></script>
 <script type="text/javascript">
+    function displayElementById(id, display) {
+        if (display) {
+            document.getElementById(id).classList.remove('d-none');
+        } else {
+            document.getElementById(id).classList.add('d-none');
+        }
+    }
+
+    function makeConnection(addr) {
+        const ws = new WebSocket(addr);
+        ws.addEventListener("open", async (event) => {
+            console.log("websocket opened");
+            displayElementById("connection", false);
+        });
+        ws.addEventListener("close", async (event) => {
+            console.log("websocket closed");
+        });
+        ws.addEventListener("error", (event) => {
+            console.log("websocket error: ", event);
+            displayElementById("connection", true);
+            document.getElementById("connectionMessage").innerText = "Can't make a connection to server";
+        });
+
+        return ws;
+    }
     function setGameState(state) {
         switch (state) {
             case "exited":
                 displayElementById("game", false);
                 displayElementById("loadingLogo", false);
+                window.location.href = "/";
                 break;
             case "game over":
                 alert("Game is over")
@@ -40,14 +86,16 @@
         console.log(gameMode, playerName);
         const newChessSetup = structuredClone(chessSetup);
         const ui = new ChessUI(
-            document.getElementById("gameBoard"), 
-            document.getElementById("playerName"), 
-            document.getElementById("opponentName"), 
+            document.getElementById("chessBoard"),
+            document.getElementById("playerName"),
+            document.getElementById("opponentName"),
             document.getElementById("gameStatus"),
-            newChessSetup, 
+            newChessSetup,
         );
         if (gameMode === "online") {
-            const chess = new OnlineChess(ui, playerName, newChessSetup);
+            const SERVER_ADDR = "ws://localhost:8080/ws";
+            const serverConnection = new ServerConnection(makeConnection(SERVER_ADDR));
+            const chess = new OnlineChess(ui, playerName, newChessSetup, serverConnection);
             setGameState("waiting");
             chess.start();
             document.getElementById("exitBtn").onclick = (event) => {
@@ -66,3 +114,5 @@
     }
     startGame('{{.gameMode}}', '{{.playerName}}');
 </script>
+
+{{ end }}
