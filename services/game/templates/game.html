@@ -103,7 +103,7 @@
                 delete chess;
             };
         } else {
-            const chess = new OfflineChess(ui, "", newChessSetup);
+            const chess = new OfflineChess(ui, playerName, newChessSetup);
             setGameState("started");
             chess.start();
             document.getElementById("exitBtn").onclick = (event) => {
@@ -112,7 +112,7 @@
             };
         }
     }
-    startGame('{{.gameMode}}', '{{.playerName}}');
+    startGame('{{.gameMode}}', '{{.user.GetName }}');
 </script>
 
 {{ end }}

@@ -1,0 +1,19 @@
+{{ define "content"}}
+<h1>Login page</h1>
+<form method="POST" action="">
+    <div class="mb-3">
+        <label for="exampleInputEmail1" class="form-label">Email address</label>
+        <input type="email" class="form-control" name="email" id="exampleInputEmail1" aria-describedby="emailHelp">
+    </div>
+    <div class="mb-3">
+        <label for="exampleInputPassword1" class="form-label">Password</label>
+        <input type="password" class="form-control" name="password" id="exampleInputPassword1">
+    </div>
+    {{ if .error }}
+    <div class="alert alert-danger">
+        {{.error}}
+    </div>
+    {{ end }}
+    <button type="submit" class="btn btn-success col-12 mt-3">Sign-in</button>
+</form>
+{{ end }}

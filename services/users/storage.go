@@ -157,3 +157,68 @@ func (db *mongoStorage) AuthenticateUser(ctx context.Context, email string, plai
 	}
 	return user, nil
 }
+
+type memoryStorage struct {
+	users []*User
+	games []*Game
+}
+
+func NewMemoryStorage() *memoryStorage {
+	return &memoryStorage{
+		users: make([]*User, 0),
+		games: make([]*Game, 0),
+	}
+}
+
+func (db *memoryStorage) UpdateUser(ctx context.Context, user *User) error {
+	for i := range db.users {
+		if db.users[i].Id == user.Id {
+			db.users[i] = user
+			return nil
+		}
+	}
+	return ErrNoRecord
+}
+
+func (db *memoryStorage) GetAllUsers(ctx context.Context) ([]*User, error) {
+	return db.users, nil
+}
+
+func (db *memoryStorage) InsertUser(ctx context.Context, user *User) error {
+	user.Id = primitive.NewObjectID()
+	db.users = append(db.users, user)
+	return nil
+}
+
+func (db *memoryStorage) GetUserById(ctx context.Context, id primitive.ObjectID) (*User, error) {
+	for _, user := range db.users {
+		if user.Id == id {
+			return user, nil
+		}
+	}
+	return nil, ErrNoRecord
+}
+
+func (db *memoryStorage) GetUserByEmail(ctx context.Context, email string) (*User, error) {
+	for _, user := range db.users {
+		if user.Email == email {
+			return user, nil
+		}
+	}
+	return nil, ErrNoRecord
+}
+
+func (db *memoryStorage) AuthenticateUser(ctx context.Context, email string, plainPassword string) (*User, error) {
+	user, err := db.GetUserByEmail(ctx, email)
+	if err != nil {
+		if errors.Is(err, ErrNoRecord) {
+			return nil, ErrAuthentication
+		}
+		return nil, err
+	}
+
+	if err := VerifyPassword(plainPassword, user.Password); err != nil {
+		return nil, ErrAuthentication
+	}
+	return user, nil
+}

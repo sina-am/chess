@@ -40,6 +40,25 @@ const (
 	Simple UserType = "SIMPLE"
 )
 
+type UserI interface {
+	IsAuthenticated() bool
+	GetName() string
+}
+
+type anonymousUser struct {
+}
+
+func NewAnonymousUser() *anonymousUser {
+	return &anonymousUser{}
+}
+func (u *anonymousUser) GetName() string {
+	return "player #1090"
+}
+
+func (u *anonymousUser) IsAuthenticated() bool {
+	return false
+}
+
 type User struct {
 	Id          primitive.ObjectID `json:"id" bson:"_id,omitempty"`
 	Type        UserType           `json:"type" bson:"type"`
@@ -53,6 +72,12 @@ type User struct {
 	Games       []Game             `json:"games" bson:"games"`
 }
 
+func (u *User) IsAuthenticated() bool {
+	return true
+}
+func (u *User) GetName() string {
+	return u.Name
+}
 func NewUser(email, name, plainPassword string) *User {
 	return &User{
 		Email:    email,
@@ -89,8 +114,8 @@ func (u *RegistrationRequest) Validate() error {
 }
 
 type AuthenticationRequest struct {
-	Email    string `json:"email" validate:"required,email"`
-	Password string `json:"password" validate:"required"`
+	Email    string `form:"email" validate:"required,email"`
+	Password string `form:"password" validate:"required"`
 }
 
 func (u *AuthenticationRequest) Validate() error {

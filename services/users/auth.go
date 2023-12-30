@@ -4,20 +4,25 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/golang-jwt/jwt"
+	"github.com/labstack/echo/v4"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 var (
 	ErrInvalidToken = errors.New("invalid token")
 	ErrExpiredToken = errors.New("expired token")
+	ErrMissingToken = errors.New("missing token")
 )
 
 type Authenticator interface {
 	Authenticate(ctx context.Context, token string) (*User, error)
 	ObtainToken(user *User) (string, error)
+	Login(c echo.Context, user *User) error
+	GetUser(c echo.Context) UserI
 }
 
 type JwtToken struct {
@@ -49,7 +54,7 @@ func (auth *jwtAuthentication) ObtainToken(user *User) (string, error) {
 
 func (auth *jwtAuthentication) Encode(jwtToken JwtToken) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"user_id":    jwtToken.UserId.String(),
+		"user_id":    jwtToken.UserId.Hex(),
 		"expired_at": jwtToken.ExpiredAt.Format(time.RFC822Z),
 	})
 
@@ -130,4 +135,27 @@ func IsExpired(t time.Time) error {
 		return fmt.Errorf("expired token: %v", t)
 	}
 	return nil
+}
+
+func (auth *jwtAuthentication) Login(c echo.Context, user *User) error {
+	token, err := auth.ObtainToken(user)
+	if err != nil {
+		return err
+	}
+	c.SetCookie(&http.Cookie{Name: "sessionID", Value: token, Path: "/"})
+	return nil
+}
+
+func (auth *jwtAuthentication) GetUser(c echo.Context) UserI {
+	cookie, err := c.Cookie("sessionID")
+	if err != nil {
+		return NewAnonymousUser()
+	}
+
+	user, err := auth.Authenticate(c.Request().Context(), cookie.Value)
+	if err != nil {
+		return NewAnonymousUser()
+	}
+
+	return user
 }

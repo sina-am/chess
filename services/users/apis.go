@@ -5,18 +5,21 @@ import (
 	"net/http"
 
 	"github.com/labstack/echo/v4"
+	"github.com/sina-am/chess/utils"
 )
 
 type APIService struct {
 	Storage       Storage
 	Authenticator Authenticator
+	Renderer      utils.Renderer
 }
 
-func NewAPIs(storage Storage, auth Authenticator) *APIService {
+func NewAPIs(storage Storage, auth Authenticator, renderer utils.Renderer) *APIService {
 	NewValidator()
 	return &APIService{
 		Storage:       storage,
 		Authenticator: auth,
+		Renderer:      renderer,
 	}
 }
 
@@ -37,32 +40,38 @@ func (s *APIService) RegistrationAPI(c echo.Context) error {
 	return c.JSON(http.StatusCreated, map[string]string{"message": "created"})
 }
 
-func (s *APIService) AuthenticationAPI(c echo.Context) error {
+func (s *APIService) AuthenticationPOST(c echo.Context) error {
 	authReq := AuthenticationRequest{}
 	if err := c.Bind(&authReq); err != nil {
 		return err
 	}
-	if err := authReq.Validate(); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"message": err.Error()})
-	}
 
+	if err := authReq.Validate(); err != nil {
+		return s.Renderer.Render(c.Response().Writer, "login.html", map[string]string{
+			"error": err.Error(),
+		})
+	}
 	user, err := s.Storage.AuthenticateUser(c.Request().Context(), authReq.Email, authReq.Password)
 	if err != nil {
 		if errors.Is(err, ErrAuthentication) {
-			return c.JSON(
-				http.StatusUnauthorized,
-				map[string]string{"message": err.Error()},
-			)
+			return s.Renderer.Render(c.Response().Writer, "login.html", map[string]string{
+				"error": err.Error(),
+			})
 		}
 		return err
 	}
 
-	token, err := s.Authenticator.ObtainToken(user)
-	if err != nil {
+	if err := s.Authenticator.Login(c, user); err != nil {
 		return err
 	}
+	return c.Redirect(http.StatusSeeOther, "/")
+}
 
-	return c.JSON(http.StatusOK, map[string]string{"token": token})
+func (s *APIService) AuthenticationAPI(c echo.Context) error {
+	if c.Request().Method == http.MethodPost {
+		return s.AuthenticationPOST(c)
+	}
+	return s.Renderer.Render(c.Response().Writer, "login.html", nil)
 }
 
 func (s *APIService) UsersAPI(c echo.Context) error {
@@ -72,20 +81,4 @@ func (s *APIService) UsersAPI(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, users)
-}
-
-// func (s *APIService) getMyUserHandler(c echo.Context) error {
-// 	return writeJSON(w, http.StatusOK, myUser)
-// }
-
-func (s *APIService) AuthenticationMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		tokenStr := c.Request().Header.Get("Authorization")
-		user, err := s.Authenticator.Authenticate(c.Request().Context(), tokenStr)
-		if err != nil {
-			return c.JSON(http.StatusUnauthorized, map[string]string{"message": err.Error()})
-		}
-		c.Set("UserId", user)
-		return next(c)
-	}
 }

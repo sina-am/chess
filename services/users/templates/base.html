@@ -1,0 +1,27 @@
+{{define "base"}}
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Login - freeChess</title>
+
+    <link rel="stylesheet" href="/static/bootstrap/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <script src="/static/bootstrap/dist/js/bootstrap.min.js"></script>
+</head>
+
+<style>
+ul {
+  list-style-type: none;
+}
+</style>
+<body style="background-color: #302e2b; color: white;">
+    <div class="mx-auto mt-4" style="width: 30%">
+        <div style="border: 1px solid #262523; background-color: #262523;">
+            <div style="padding: 15px 15px;">
+            {{template "content" .}}
+            </div>
+        </div>
+    </div>
+</body>
+{{ end }}

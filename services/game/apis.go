@@ -22,14 +22,19 @@ func (s *APIService) GameOptions(c echo.Context) error {
 
 func (s *APIService) StartGame(c echo.Context) error {
 	gameMode := c.QueryParam("gameMode")
-	return s.Renderer.Render(c.Response().Writer, "game.html", map[string]string{
-		"gameMode":   gameMode,
-		"playerName": "Sina",
+	return s.Renderer.Render(c.Response().Writer, "game.html", map[string]any{
+		"gameMode": gameMode,
+		"user":     s.Authenticator.GetUser(c),
 	})
 }
 
 func (s *APIService) Home(c echo.Context) error {
-	return s.Renderer.Render(c.Response().Writer, "home.html", nil)
+	user := s.Authenticator.GetUser(c)
+	content := map[string]any{
+		"user": user,
+	}
+
+	return s.Renderer.Render(c.Response().Writer, "home.html", content)
 }
 
 func (s *APIService) WebSocketAPI(c echo.Context) error {

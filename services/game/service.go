@@ -6,6 +6,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/labstack/echo/v4"
+	"github.com/sina-am/chess/config"
 	"github.com/sina-am/chess/services/users"
 	"github.com/sina-am/chess/utils"
 )
@@ -14,16 +15,12 @@ type service struct {
 	apis *APIService
 }
 
-type Config struct {
-	Authenticator users.Authenticator
-	Debug         bool
-}
-
-func NewService(config Config) (*service, error) {
-	renderer, err := utils.NewTemplateRenderer(config.Debug, "./services/game/templates")
+func NewService(cfg config.Config, auth users.Authenticator) (*service, error) {
+	renderer, err := utils.NewTemplateRenderer(cfg.Debug, "./services/game/templates")
 	if err != nil {
 		return nil, err
 	}
+
 	return &service{
 		apis: &APIService{
 			WsUpgrader: websocket.Upgrader{
@@ -33,7 +30,7 @@ func NewService(config Config) (*service, error) {
 				WriteBufferSize:  1024,
 			},
 			GameHandler:   NewGameHandler(NewWaitList()),
-			Authenticator: config.Authenticator,
+			Authenticator: auth,
 			Renderer:      renderer,
 		},
 	}, nil
