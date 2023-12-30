@@ -1,10 +1,13 @@
-const BOARD_SIZE = 600;
+let BOARD_SIZE = 650;
+if (window.screen.height < 800 || window.screen.width < 1000) {
+    BOARD_SIZE = (window.screen.height - 150) < (window.screen.width - 15)? (window.screen.height - 150): (window.screen.width - 15);
+}
+
 const SQUIRE_SIZE = BOARD_SIZE / 8;
 const WHITE_COLOR = '#e9edcc';
 const BLACK_COLOR = '#779954';
 const SELECTED_SQUIRE_COLOR = "#f4f67e";
 const IMAGE_LINK = "static/img/pieces/";
-
 
 function getSquireColor(x, y) {
     if (y % 2 === 0) {
@@ -24,6 +27,11 @@ function getSquireColor(x, y) {
 
 class ChessUI {
     constructor(boardElem, playerElem, opponentElem, gameStatusElem, board) {
+
+        console.log("width: ", window.screen.width);
+        console.log("height: ", window.screen.height);
+
+
         this.canvas = document.createElement("canvas");
         this.canvas.width = BOARD_SIZE;
         this.canvas.height = BOARD_SIZE

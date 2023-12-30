@@ -1,8 +1,15 @@
 {{ define "content"}}
-<div class="col-6">
-    <img src="static/img/standardboard.png" alt="Standard Board" width="496" height="496">
+<style>
+@media(max-width:768px) {
+    #standardBoard {
+        display: none;
+    }
+}
+</style>
+<div class="col-md">
+    <img id="standardBoard" src="static/img/standardboard.png" alt="Standard Board" width="496" height="496">
 </div>
-<div class="col-6 text-center">
+<div class="col-md text-center">
     <p class="h1 ">Play freeChess <br />Online <br /> on the #2 Site!</p>
     <div class="d-grid gap-4 col-6 mx-auto mt-4">
         <a href="/game?gameMode=online" class="btn btn-success inline">

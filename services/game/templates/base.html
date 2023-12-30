@@ -4,6 +4,8 @@
 
 <head>
     <title>Welcome to freeChess</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
 
     <link rel="stylesheet" href="static/bootstrap/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.min.css">
@@ -12,14 +14,20 @@
 </head>
 
 <style>
-ul {
-  list-style-type: none;
-}
+    ul {
+        list-style-type: none;
+    }
+    @media(max-width:768px) {
+        #menu {
+            display: none;
+        }
+    }
 </style>
-<body style="background-color: #302e2b; color: white;">
-    <div class="d-flex flex-row">
-        <div class="col-1" style="background-color: #262522;">
-            <ul class="nav flex-column d-grid gap-3 mt-2 justify-content-center">
+
+<body class="container-fluid" style="background-color: #302e2b; color: white;">
+    <div class="row">
+        <div class="col-sm-1" id="menu" style="background-color: #262522;">
+            <ul class="navbar navbar-expand-lg flex-column d-grid gap-3 mt-2 justify-content-center">
                 <li class="nav-item">freeChess Logo</li>
                 <li class="nav-item">
                     <a class="nav-link" href="#">Play</a>
@@ -34,8 +42,8 @@ ul {
                 </li>
             </ul>
         </div>
-        <div class="container col-11" id="container">
-            <div class="justify-content-md-center mt-4 d-flex flex-row">
+        <div class="col-sm-11" id="container">
+            <div class="row justify-content-md-center">
                 <div id="connection">
                     <div id="connectionMessage"></div>
                 </div>

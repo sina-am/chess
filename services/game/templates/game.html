@@ -1,34 +1,30 @@
 {{ define "content"}}
-<div class="container-fluid">
-    <div id="loadingLogo">
-        <div class="spinner-border ms-auto" aria-hidden="true"></div>
-        <strong role="status">Loading...</strong>
+<div id="loadingLogo">
+    <div class="spinner-border ms-auto" aria-hidden="true"></div>
+    <strong role="status">Loading...</strong>
+</div>
+<div class="row d-none" id="game">
+    <div class="col-md" id="gameSection">
+        <div class="d-flex flex-start align-items-center mb-2">
+            <img class="rounded-circle shadow-1-strong me-3" src="static/img/profile-icon.gif" alt="avatar"
+                width="40" height="40">
+            <div>
+                <h6 class="fw-bold text-success mb-1" id="opponentName"></h6>
+            </div>
+        </div>
+        <div id="chessBoard"></div>
+        <div class="d-flex flex-start align-items-center mt-2">
+            <img class="rounded-circle shadow-1-strong me-3" src="static/img/profile-icon.gif" alt="avatar"
+                width="40" height="40">
+            <div>
+                <h6 class="fw-bold text-success mb-1" id="playerName"></h6>
+            </div>
+        </div>
     </div>
-    <div class="d-flex flex-row  d-none" id="game">
-        <div class="col-8">
-            <div id="gameBar" class="col-4">
-                <div class="d-flex flex-start align-items-center mb-2">
-                    <img class="rounded-circle shadow-1-strong me-3" src="static/img/profile-icon.gif" alt="avatar"
-                        width="40" height="40">
-                    <div>
-                        <h6 class="fw-bold text-success mb-1" id="opponentName"></h6>
-                    </div>
-                </div>
-            </div>
-            <div id="chessBoard"></div>
-            <div class="d-flex flex-start align-items-center mt-2">
-                <img class="rounded-circle shadow-1-strong me-3" src="static/img/profile-icon.gif" alt="avatar"
-                    width="40" height="40">
-                <div>
-                    <h6 class="fw-bold text-success mb-1" id="playerName"></h6>
-                </div>
-            </div>
-        </div>
-        <div class="col-4">
-            <div id="gameWinner"></div>
-            <p style="color: red;" id="gameStatus">No winner</p>
-            <button id="exitBtn" class="btn btn-danger">Resign</button>
-        </div>
+    <div class="col-md" id="sideBar">
+        <div id="gameWinner"></div>
+        <p style="color: red;" id="gameStatus">No winner</p>
+        <button id="exitBtn" class="btn btn-danger">Resign</button>
     </div>
 </div>
 
@@ -82,7 +78,7 @@
         }
     }
 
-    function startGame(gameMode, playerName) {
+    function startGame(gameMode, playerName, gameDuration) {
         console.log(gameMode, playerName);
         const newChessSetup = structuredClone(chessSetup);
         const ui = new ChessUI(
@@ -95,7 +91,7 @@
         if (gameMode === "online") {
             const SERVER_ADDR = "ws://localhost:8080/ws";
             const serverConnection = new ServerConnection(makeConnection(SERVER_ADDR));
-            const chess = new OnlineChess(ui, playerName, newChessSetup, serverConnection);
+            const chess = new OnlineChess(ui, playerName, newChessSetup, serverConnection, parseInt(gameDuration));
             setGameState("waiting");
             chess.start();
             document.getElementById("exitBtn").onclick = (event) => {
@@ -112,7 +108,7 @@
             };
         }
     }
-    startGame('{{.gameMode}}', '{{.user.GetName }}');
+    startGame('{{.gameMode}}', '{{.user.GetName }}', '{{ .gameDuration}}');
 </script>
 
 {{ end }}
