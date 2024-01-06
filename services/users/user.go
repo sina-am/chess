@@ -1,7 +1,6 @@
 package users
 
 import (
-	"github.com/go-playground/validator"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -12,12 +11,6 @@ const (
 	FemaleGender Gender = "female"
 	OtherGender  Gender = "other"
 )
-
-var validate *validator.Validate
-
-func NewValidator() {
-	validate = validator.New()
-}
 
 type RequestModel interface {
 	Validate() error
@@ -101,33 +94,13 @@ type RegistrationRequest struct {
 	Gender   Gender `json:"gender" validate:"required,gender"`
 }
 
-func (u *RegistrationRequest) Validate() error {
-	err := validate.RegisterValidation("gender", func(fl validator.FieldLevel) bool {
-		value := fl.Field().Interface().(Gender)
-		return value == MaleGender || value == FemaleGender || value == OtherGender
-	})
-	if err != nil {
-		panic(err)
-	}
-
-	return validate.Struct(u)
-}
-
 type AuthenticationRequest struct {
 	Email    string `form:"email" validate:"required,email"`
 	Password string `form:"password" validate:"required"`
-}
-
-func (u *AuthenticationRequest) Validate() error {
-	return validate.Struct(u)
 }
 
 type UpdateUserRequest struct {
 	Gender  Gender `json:"gender"`
 	Picture string `json:"picture"`
 	Name    string `json:"name"`
-}
-
-func (u *UpdateUserRequest) Validate() error {
-	return validate.Struct(u)
 }

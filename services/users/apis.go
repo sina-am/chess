@@ -5,17 +5,16 @@ import (
 	"net/http"
 
 	"github.com/labstack/echo/v4"
-	"github.com/sina-am/chess/utils"
+	"github.com/sina-am/chess/core"
 )
 
 type APIService struct {
 	Storage       Storage
 	Authenticator Authenticator
-	Renderer      utils.Renderer
+	Renderer      core.Renderer
 }
 
-func NewAPIs(storage Storage, auth Authenticator, renderer utils.Renderer) *APIService {
-	NewValidator()
+func NewAPIs(storage Storage, auth Authenticator, renderer core.Renderer) *APIService {
 	return &APIService{
 		Storage:       storage,
 		Authenticator: auth,
@@ -28,7 +27,7 @@ func (s *APIService) RegistrationAPI(c echo.Context) error {
 	if err := c.Bind(&userReq); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"message": "bad request"})
 	}
-	if err := userReq.Validate(); err != nil {
+	if err := c.Validate(&userReq); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"message": err.Error()})
 	}
 
@@ -46,15 +45,15 @@ func (s *APIService) AuthenticationPOST(c echo.Context) error {
 		return err
 	}
 
-	if err := authReq.Validate(); err != nil {
-		return s.Renderer.Render(c.Response().Writer, "login.html", map[string]string{
+	if err := c.Validate(&authReq); err != nil {
+		return s.Renderer.Render(c, "login.html", map[string]any{
 			"error": err.Error(),
 		})
 	}
 	user, err := s.Storage.AuthenticateUser(c.Request().Context(), authReq.Email, authReq.Password)
 	if err != nil {
 		if errors.Is(err, ErrAuthentication) {
-			return s.Renderer.Render(c.Response().Writer, "login.html", map[string]string{
+			return s.Renderer.Render(c, "login.html", map[string]any{
 				"error": err.Error(),
 			})
 		}
@@ -71,7 +70,7 @@ func (s *APIService) AuthenticationAPI(c echo.Context) error {
 	if c.Request().Method == http.MethodPost {
 		return s.AuthenticationPOST(c)
 	}
-	return s.Renderer.Render(c.Response().Writer, "login.html", nil)
+	return s.Renderer.Render(c, "login.html", nil)
 }
 
 func (s *APIService) UsersAPI(c echo.Context) error {

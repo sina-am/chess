@@ -2,28 +2,42 @@ package game
 
 import (
 	"log"
+	"net/http"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/labstack/echo/v4"
+	"github.com/sina-am/chess/core"
 	"github.com/sina-am/chess/services/users"
-	"github.com/sina-am/chess/utils"
 )
 
 type APIService struct {
 	WsUpgrader    websocket.Upgrader
 	GameHandler   GameHandler
-	Renderer      utils.Renderer
+	Renderer      core.Renderer
 	Authenticator users.Authenticator
 }
 
 func (s *APIService) GameOptions(c echo.Context) error {
-	return s.Renderer.Render(c.Response().Writer, "game-options.html", nil)
+	return s.Renderer.Render(c, "game-options.html", nil)
+}
+
+type gameOptionsIn struct {
+	Mode     string        `query:"game_mode" validate:"required,eq=online|eq=offline"`
+	Duration time.Duration `query:"duration" validate:"required,gte=10"`
 }
 
 func (s *APIService) StartGame(c echo.Context) error {
-	gameMode := c.QueryParam("gameMode")
-	return s.Renderer.Render(c.Response().Writer, "game.html", map[string]any{
-		"gameMode": gameMode,
+	opts := gameOptionsIn{}
+	if err := c.Bind(&opts); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": err.Error()})
+	}
+	if err := c.Validate(&opts); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"message": err.Error()})
+	}
+
+	return s.Renderer.Render(c, "game.html", map[string]any{
+		"gameOpts": opts,
 		"user":     s.Authenticator.GetUser(c),
 	})
 }
@@ -34,7 +48,7 @@ func (s *APIService) Home(c echo.Context) error {
 		"user": user,
 	}
 
-	return s.Renderer.Render(c.Response().Writer, "home.html", content)
+	return s.Renderer.Render(c, "home.html", content)
 }
 
 func (s *APIService) WebSocketAPI(c echo.Context) error {

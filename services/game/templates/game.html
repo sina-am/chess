@@ -108,7 +108,7 @@
             };
         }
     }
-    startGame('{{.gameMode}}', '{{.user.GetName }}', '{{ .gameDuration}}');
+    startGame('{{ .gameOpts.Mode }}', '{{ .user.GetName }}', '{{ .gameOpts.Duration }}');
 </script>
 
 {{ end }}

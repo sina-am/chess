@@ -2,6 +2,7 @@ package game
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/sina-am/chess/chess"
@@ -12,12 +13,19 @@ type playMoveMsg struct {
 	gameId string
 	move   chess.Move
 }
+type startGameMsg struct {
+	player      *player
+	gameSetting GameSetting
+}
 
 type exitGameMsg struct {
 	gameId string
 	player *player
 }
 
+type GameSetting struct {
+	Duration time.Duration
+}
 type GameHandler interface {
 	Start()
 
@@ -27,7 +35,7 @@ type GameHandler interface {
 	Play(player *player, gameId string, move chess.Move)
 	ExitGame(gameId string, player *player)
 
-	AddToWaitList(p *player)
+	AddToWaitList(p *player, gs GameSetting)
 	RemoveFromWaitList(p *player)
 }
 
@@ -37,7 +45,7 @@ type gameHandler struct {
 
 	waitList WaitList
 
-	waitListCh     chan *player
+	waitListCh     chan startGameMsg
 	exitWaitListCh chan *player
 	registerCh     chan *player
 	unregisterCh   chan *player
@@ -51,7 +59,7 @@ func NewGameHandler(wl WaitList) GameHandler {
 		players: map[string]*player{},
 
 		waitList:       wl,
-		waitListCh:     make(chan *player),
+		waitListCh:     make(chan startGameMsg),
 		exitWaitListCh: make(chan *player),
 		exitGameCh:     make(chan exitGameMsg),
 		playMoveCh:     make(chan playMoveMsg),
@@ -74,8 +82,8 @@ func (h *gameHandler) Play(player *player, gameId string, move chess.Move) {
 func (h *gameHandler) ExitGame(gameId string, p *player) {
 	h.exitGameCh <- exitGameMsg{player: p, gameId: gameId}
 }
-func (h *gameHandler) AddToWaitList(p *player) {
-	h.waitListCh <- p
+func (h *gameHandler) AddToWaitList(p *player, gs GameSetting) {
+	h.waitListCh <- startGameMsg{player: p, gameSetting: gs}
 }
 func (h *gameHandler) RemoveFromWaitList(p *player) {
 	h.exitWaitListCh <- p
@@ -89,8 +97,8 @@ func (h *gameHandler) Start() {
 			h.handleUnregister(p)
 		case pm := <-h.playMoveCh:
 			h.handlePlayerMove(pm.player, pm.move, pm.gameId)
-		case p := <-h.waitListCh:
-			h.handleWait(p)
+		case msg := <-h.waitListCh:
+			h.handleWait(msg.player, msg.gameSetting)
 		case p := <-h.exitWaitListCh:
 			h.handleExitWaitList(p)
 		case msg := <-h.exitGameCh:
@@ -165,10 +173,10 @@ func (h *gameHandler) handlePlayerMove(p *player, move chess.Move, gameId string
 	}
 }
 
-func (h *gameHandler) startNewGame(p1, p2 *player) {
+func (h *gameHandler) startNewGame(p1, p2 *player, gs GameSetting) {
 	gameId := uuid.New().String()
 
-	g := chess.NewSession([]string{p1.GetId(), p2.GetId()})
+	g := chess.NewSession([]string{p1.GetId(), p2.GetId()}, gs.Duration)
 
 	h.games[gameId] = g
 
@@ -184,18 +192,21 @@ func (h *gameHandler) startNewGame(p1, p2 *player) {
 	}
 }
 
-func (h *gameHandler) handleWait(player1 *player) {
-	player2, err := h.waitList.Pop()
+func createWaitListKey(gs GameSetting) string {
+	return fmt.Sprintf("<%d>", gs.Duration)
+}
+func (h *gameHandler) handleWait(p *player, gs GameSetting) {
+	p2, err := h.waitList.Pop(createWaitListKey(gs))
 
 	// Wait list is empty
 	if err != nil {
-		if err := h.waitList.Add(player1); err != nil {
-			player1.Err <- err
+		if err := h.waitList.Add(createWaitListKey(gs), p); err != nil {
+			p.Err <- err
 		}
 		return
 	}
 
-	h.startNewGame(player1, player2)
+	h.startNewGame(p, p2, gs)
 }
 func (h *gameHandler) handleExitGame(p *player, gameId string) {
 	g := h.games[gameId]

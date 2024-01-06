@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -170,8 +171,9 @@ func (p *player) WriteConn() {
 }
 
 type StartGameMessage struct {
-	Id   string `json:"id,omitempty"`
-	Name string `json:"name"`
+	Id       string `json:"id,omitempty"`
+	Name     string `json:"name"`
+	Duration int    `json:"duration"`
 }
 
 func (p *player) handleMessage(msg message) error {
@@ -191,6 +193,20 @@ func (p *player) handleStart(msg message) error {
 		return err
 	}
 
+	duration := 0 * time.Minute
+	switch payload.Duration {
+	case 10:
+		duration = 10 * time.Minute
+	case 5:
+		duration = 5 * time.Minute
+	case 3:
+		duration = 3 * time.Minute
+	case 1:
+		duration = 1 * time.Minute
+	default:
+		return fmt.Errorf("invalid time duration")
+	}
+
 	if p.info.status == StatusWaiting {
 		return fmt.Errorf("already in a waiting list")
 	}
@@ -200,7 +216,7 @@ func (p *player) handleStart(msg message) error {
 
 	p.info.status = StatusWaiting
 	p.info.name = payload.Name
-	p.gameHandler.AddToWaitList(p)
+	p.gameHandler.AddToWaitList(p, GameSetting{Duration: duration})
 
 	p.Send <- map[string]string{
 		"message": fmt.Sprintf("Id: %s", p.id),

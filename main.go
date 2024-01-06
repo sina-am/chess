@@ -7,6 +7,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/sina-am/chess/config"
+	"github.com/sina-am/chess/core"
 	"github.com/sina-am/chess/services/game"
 	"github.com/sina-am/chess/services/users"
 )
@@ -14,12 +15,18 @@ import (
 func main() {
 	e := echo.New()
 	e.Logger.SetLevel(1)
+
 	// Middleware
+	e.Use(middleware.CSRFWithConfig(middleware.CSRFConfig{
+		TokenLookup: "form:csrf_token",
+	}))
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 
 	// Routes
 	e.Static("/static", "./static")
+
+	e.Validator = core.NewValidator()
 
 	cfg := config.Config{
 		Debug:     true,

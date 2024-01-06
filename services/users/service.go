@@ -2,11 +2,10 @@ package users
 
 import (
 	"context"
-	"log"
 
 	"github.com/labstack/echo/v4"
 	"github.com/sina-am/chess/config"
-	"github.com/sina-am/chess/utils"
+	"github.com/sina-am/chess/core"
 )
 
 type Service interface {
@@ -34,15 +33,8 @@ func NewService(cfg config.Config) (*service, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	user := NewUser("sinaaarabi2@gmail.com", "sina", "sina.am")
-	if err := storage.InsertUser(context.Background(), user); err != nil {
-		return nil, err
-	}
-	log.Printf("create a new user with email: %s, password: sina.am", user.Email)
-
 	authenticator := NewJWTAuthentication(cfg.SecretKey, storage)
-	renderer, err := utils.NewTemplateRenderer(cfg.Debug, "./services/users/templates")
+	renderer, err := core.NewTemplateRenderer(cfg.Debug, "./services/users/templates")
 	if err != nil {
 		return nil, err
 	}

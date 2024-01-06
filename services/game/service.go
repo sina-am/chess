@@ -7,8 +7,8 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/labstack/echo/v4"
 	"github.com/sina-am/chess/config"
+	"github.com/sina-am/chess/core"
 	"github.com/sina-am/chess/services/users"
-	"github.com/sina-am/chess/utils"
 )
 
 type service struct {
@@ -16,7 +16,7 @@ type service struct {
 }
 
 func NewService(cfg config.Config, auth users.Authenticator) (*service, error) {
-	renderer, err := utils.NewTemplateRenderer(cfg.Debug, "./services/game/templates")
+	renderer, err := core.NewTemplateRenderer(cfg.Debug, "./services/game/templates")
 	if err != nil {
 		return nil, err
 	}
@@ -29,7 +29,7 @@ func NewService(cfg config.Config, auth users.Authenticator) (*service, error) {
 				ReadBufferSize:   1024,
 				WriteBufferSize:  1024,
 			},
-			GameHandler:   NewGameHandler(NewWaitList()),
+			GameHandler:   NewGameHandler(NewMemoryWaitList()),
 			Authenticator: auth,
 			Renderer:      renderer,
 		},

@@ -45,12 +45,12 @@ func (h *loggerHandler) ExitGame(gameId string, p *player) {
 	h.next.ExitGame(gameId, p)
 }
 
-func (h *loggerHandler) AddToWaitList(p *player) {
+func (h *loggerHandler) AddToWaitList(p *player, gs GameSetting) {
 	h.logger.Info(
 		"player added to wait list",
 		zap.String("playerID", p.GetId()),
 	)
-	h.next.AddToWaitList(p)
+	h.next.AddToWaitList(p, gs)
 }
 func (h *loggerHandler) RemoveFromWaitList(p *player) {
 	h.logger.Info(

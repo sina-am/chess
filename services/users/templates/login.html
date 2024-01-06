@@ -1,6 +1,7 @@
 {{ define "content"}}
 <h1>Login page</h1>
 <form method="POST" action="">
+    <input type="hidden" value="{{.csrfToken}}" name="csrf_token" />
     <div class="mb-3">
         <label for="exampleInputEmail1" class="form-label">Email address</label>
         <input type="email" class="form-control" name="email" id="exampleInputEmail1" aria-describedby="emailHelp">

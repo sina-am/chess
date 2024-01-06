@@ -1,13 +1,14 @@
-package utils
+package core
 
 import (
-	"io"
 	"path"
 	"text/template"
+
+	"github.com/labstack/echo/v4"
 )
 
 type Renderer interface {
-	Render(w io.Writer, name string, content any) error
+	Render(c echo.Context, name string, content map[string]any) error
 }
 
 type templateRenderer struct {
@@ -28,13 +29,17 @@ func NewTemplateRenderer(debug bool, rootPath string) (Renderer, error) {
 	}, nil
 }
 
-func (t *templateRenderer) Render(w io.Writer, name string, content any) error {
+func (t *templateRenderer) Render(c echo.Context, name string, content map[string]any) error {
+	if content == nil {
+		content = map[string]any{}
+	}
+	content["csrfToken"] = c.Get("csrf")
 	if t.debug {
 		tmpl, err := template.New("").ParseFiles(path.Join(t.rootPath, name), path.Join(t.rootPath, "base.html"))
 		if err != nil {
 			return err
 		}
-		return tmpl.ExecuteTemplate(w, "base", content)
+		return tmpl.ExecuteTemplate(c.Response().Writer, "base", content)
 	}
-	return t.tmpl.ExecuteTemplate(w, name, content)
+	return t.tmpl.ExecuteTemplate(c.Response().Writer, name, content)
 }
