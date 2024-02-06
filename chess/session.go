@@ -84,7 +84,9 @@ func (g *chessSession) Play(playerColor Color, m Move) error {
 
 func (g *chessSession) Exit(playerColor Color) (Color, error) {
 	for _, ticker := range g.tickers {
-		ticker.Stop()
+		if ticker != nil {
+			ticker.Stop()
+		}
 	}
 	return playerColor.OppositeColor(), nil
 }
