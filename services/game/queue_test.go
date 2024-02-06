@@ -10,7 +10,7 @@ import (
 func TestQueueAdd(t *testing.T) {
 	queue := NewMemoryWaitList()
 
-	p := NewPlayer(nil, nil, auth.NewAnonymousUser())
+	p := NewWSClient(nil, nil, auth.NewAnonymousUser())
 	key := "<10>"
 	queue.Add(key, p)
 
@@ -19,7 +19,7 @@ func TestQueueAdd(t *testing.T) {
 func TestQueueRemove(t *testing.T) {
 	queue := NewMemoryWaitList()
 
-	p := NewPlayer(nil, nil, auth.NewAnonymousUser())
+	p := NewWSClient(nil, nil, auth.NewAnonymousUser())
 	keys := []string{"<10>", "<20>", "<30>"}
 	for _, key := range keys {
 		queue.Add(key, p)
@@ -34,10 +34,10 @@ func TestQueueRemove(t *testing.T) {
 func TestQueuePop(t *testing.T) {
 	queue := NewMemoryWaitList()
 
-	players := []*player{
-		NewPlayer(nil, nil, auth.NewAnonymousUser()),
-		NewPlayer(nil, nil, auth.NewAnonymousUser()),
-		NewPlayer(nil, nil, auth.NewAnonymousUser()),
+	players := []Client{
+		NewWSClient(nil, nil, auth.NewAnonymousUser()),
+		NewWSClient(nil, nil, auth.NewAnonymousUser()),
+		NewWSClient(nil, nil, auth.NewAnonymousUser()),
 	}
 	key := "<10>"
 

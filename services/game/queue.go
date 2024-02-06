@@ -3,22 +3,22 @@ package game
 import "fmt"
 
 type Queue struct {
-	queues map[string][]*player
+	queues map[string][]Client
 }
 
 type WaitList interface {
-	FindAndDelete(p *player) error
+	FindAndDelete(p Client) error
 	Empty() bool
-	Add(key string, p *player) error
-	Pop(key string) (*player, error)
-	Remove(p *player) error
+	Add(key string, p Client) error
+	Pop(key string) (Client, error)
+	Remove(p Client) error
 }
 
 func NewMemoryWaitList() *Queue {
-	return &Queue{queues: make(map[string][]*player, 0)}
+	return &Queue{queues: make(map[string][]Client, 0)}
 }
 
-func (l *Queue) Remove(p *player) error {
+func (l *Queue) Remove(p Client) error {
 	found := false
 	for i := range l.queues {
 		for j := 0; j < len(l.queues[i]); j++ {
@@ -35,7 +35,7 @@ func (l *Queue) Remove(p *player) error {
 	return nil
 }
 
-func (l *Queue) Pop(key string) (*player, error) {
+func (l *Queue) Pop(key string) (Client, error) {
 	queue, ok := l.queues[key]
 	if !ok {
 		return nil, fmt.Errorf("empty list")
@@ -48,7 +48,7 @@ func (l *Queue) Pop(key string) (*player, error) {
 	return p, nil
 }
 
-func (l *Queue) Add(key string, p *player) error {
+func (l *Queue) Add(key string, p Client) error {
 	queue, ok := l.queues[key]
 	if !ok {
 		l.queues[key] = append(l.queues[key], p)
@@ -56,7 +56,7 @@ func (l *Queue) Add(key string, p *player) error {
 	}
 
 	for i := range queue {
-		if queue[i].GetId() == p.GetId() {
+		if queue[i] == p {
 			return fmt.Errorf("already in the waiting list")
 		}
 	}
@@ -64,16 +64,16 @@ func (l *Queue) Add(key string, p *player) error {
 	return nil
 }
 
-func (l *Queue) FindAndDelete(p *player) error {
+func (l *Queue) FindAndDelete(p Client) error {
 	for key := range l.queues {
 		for i := range l.queues[key] {
-			if p.GetId() == l.queues[key][i].GetId() {
+			if p == l.queues[key][i] {
 				l.queues[key] = append(l.queues[key][:i], l.queues[key][i+1:]...)
 				return nil
 			}
 		}
 	}
-	return fmt.Errorf("player %s not in the list", p.GetId())
+	return fmt.Errorf("player %v not in the list", p)
 }
 
 func (l *Queue) Empty() bool {

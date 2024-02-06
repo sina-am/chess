@@ -62,9 +62,9 @@ func (s *APIService) WebSocketAPI(c echo.Context) error {
 	c.Logger().Debug("new player %s connected", conn.RemoteAddr())
 
 	user := s.Authenticator.GetUser(c)
-	p := NewPlayer(conn, s.GameHandler, user)
+	p := NewWSClient(conn, s.GameHandler, user)
 
-	p.gameHandler.Register(p)
+	p.gameHandler.Register(p, user)
 	p.StartLoop(c.Request().Context())
 	return nil
 }

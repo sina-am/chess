@@ -7,7 +7,6 @@ import (
 
 type chessSession struct {
 	engine         *chessEngine
-	players        map[string]Color
 	lastTimePlayed map[Color]time.Time
 	remainingTimes map[Color]time.Duration
 	tickers        map[Color]*time.Ticker
@@ -16,7 +15,7 @@ type chessSession struct {
 	winner   Color
 }
 
-func NewSession(playersId []string, duration time.Duration) *chessSession {
+func NewSession(duration time.Duration) *chessSession {
 
 	engine := NewEngine()
 	whiteTimer := time.NewTicker(10 * time.Minute)
@@ -24,10 +23,6 @@ func NewSession(playersId []string, duration time.Duration) *chessSession {
 	session := &chessSession{
 		winner: Empty,
 		engine: engine,
-		players: map[string]Color{
-			playersId[0]: White,
-			playersId[1]: Black,
-		},
 		lastTimePlayed: map[Color]time.Time{
 			White: time.Now(),
 			Black: {},
@@ -64,11 +59,7 @@ func (g *chessSession) IsFinished() bool {
 	return g.finished || g.engine.IsFinished()
 }
 
-func (g *chessSession) Play(playerId string, m Move) error {
-	playerColor, found := g.players[playerId]
-	if !found {
-		return fmt.Errorf("player with id %s not found", playerId)
-	}
+func (g *chessSession) Play(playerColor Color, m Move) error {
 	err := g.engine.Play(playerColor, m)
 	if err != nil {
 		return err
@@ -91,39 +82,9 @@ func (g *chessSession) Play(playerId string, m Move) error {
 	return nil
 }
 
-func (g *chessSession) Exit(playerId string) (Color, error) {
-	playerColor, found := g.players[playerId]
-	if !found {
-		return 0, fmt.Errorf("player with id %s not found", playerId)
-	}
-
+func (g *chessSession) Exit(playerColor Color) (Color, error) {
 	for _, ticker := range g.tickers {
 		ticker.Stop()
 	}
-	fmt.Printf("Clean exit")
 	return playerColor.OppositeColor(), nil
-}
-
-func (g *chessSession) GetPlayers() []string {
-	var ids []string
-	for id := range g.players {
-		ids = append(ids, id)
-	}
-	return ids
-}
-
-func (g *chessSession) GetPlayerByColor(color Color) string {
-	for player, playerColor := range g.players {
-		if playerColor == color {
-			return player
-		}
-	}
-	panic("invalid color")
-}
-
-func (g *chessSession) InGame(playerId string) bool {
-	if _, found := g.players[playerId]; found {
-		return true
-	}
-	return false
 }

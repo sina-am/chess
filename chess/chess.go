@@ -30,10 +30,6 @@ func (m Move) Validate() error {
 type Chess interface {
 	GetWinner() Color
 	IsFinished() bool
-	Play(playerId string, m Move) error
-	Exit(playerId string) (Color, error)
-
-	InGame(playerId string) bool
-	GetPlayers() []string
-	GetPlayerByColor(c Color) string
+	Play(playerColor Color, m Move) error
+	Exit(playerColor Color) (Color, error)
 }

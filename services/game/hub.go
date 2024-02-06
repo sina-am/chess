@@ -2,75 +2,68 @@ package game
 
 import (
 	"fmt"
-	"sync"
+	"log"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/sina-am/chess/auth"
 	"github.com/sina-am/chess/chess"
 )
 
+type PlayerStatus int
+
+const (
+	StatusWaiting   PlayerStatus = 0
+	StatusPlaying   PlayerStatus = 1
+	StatusConnected PlayerStatus = 2
+)
+
+type onlinePlayer struct {
+	client      Client
+	user        auth.User
+	status      PlayerStatus
+	currentGame *OnlineGame
+}
+
 type onlinePlayerStorage struct {
-	mu      sync.Mutex
-	players map[string]*player
+	players map[Client]*onlinePlayer
 }
 
 func NewOnlinePlayerStorage() *onlinePlayerStorage {
 	return &onlinePlayerStorage{
-		mu:      sync.Mutex{},
-		players: map[string]*player{},
+		players: map[Client]*onlinePlayer{},
 	}
 }
 
-func (s *onlinePlayerStorage) Exists(id string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	_, ok := s.players[id]
-	return ok
-}
-
-func (s *onlinePlayerStorage) Add(id string, p *player) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if oldPlayer, ok := s.players[id]; ok {
-		oldPlayer.Close <- fmt.Errorf("you connected with another connection")
+func (s *onlinePlayerStorage) Add(c Client, p *onlinePlayer) {
+	if oldPlayer, ok := s.players[c]; ok {
+		oldPlayer.client.Close()
 	}
-	s.players[id] = p
+	s.players[c] = p
 }
 
-func (s *onlinePlayerStorage) Get(id string) *player {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return s.players[id]
+func (s *onlinePlayerStorage) Get(c Client) *onlinePlayer {
+	return s.players[c]
 }
 
-func (s *onlinePlayerStorage) Remove(id string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	p, ok := s.players[id]
+func (s *onlinePlayerStorage) Remove(c Client) {
+	p, ok := s.players[c]
 	if !ok {
 		return
 	}
 
-	delete(s.players, id)
-	close(p.Send)
-	close(p.Err)
-	close(p.Join)
-	close(p.End)
+	delete(s.players, c)
+	p.client.Close()
 }
 
 type EventType int
 
 const (
 	RegisterEventType EventType = iota
-	UnRegisterEventType
-	PlayEventType
-	JoinWaitListEventType
-	LeaveWaitListEventType
-	ExitGameEventType
+	UnRegisterEvent
+	PlayEvent
+	JoinWaitListEvent
+	LeaveWaitListEvent
+	ExitEvent
 )
 
 type EventMsg struct {
@@ -79,30 +72,29 @@ type EventMsg struct {
 }
 
 type RegisterEventMsg struct {
-	Player *player
+	Player Client
+	User   auth.User
 }
 
 type UnRegisterEventMsg struct {
-	Player *player
+	Player Client
 }
 
 type JoinWaitListEventMsg struct {
-	Player      *player
+	Player      Client
 	GameSetting GameSetting
 }
 
 type LeaveWaitListEventMsg struct {
-	Player *player
+	Player Client
 }
 
-type ExitGameEventMsg struct {
-	Player *player
-	GameId string
+type ExitEventMsg struct {
+	Player Client
 }
 
 type PlayEventMsg struct {
-	Player *player
-	GameId string
+	Player Client
 	Move   chess.Move
 }
 
@@ -112,77 +104,71 @@ type GameSetting struct {
 type GameHandler interface {
 	Start()
 
-	Register(*player)
-	UnRegister(*player)
+	Register(p Client, user auth.User)
+	UnRegister(Client)
 
-	Play(player *player, gameId string, move chess.Move)
-	ExitGame(gameId string, player *player)
+	Play(client Client, move chess.Move)
+	Exit(clien Client)
 
-	AddToWaitList(p *player, gs GameSetting)
-	RemoveFromWaitList(p *player)
+	AddToWaitList(p Client, gs GameSetting)
+	RemoveFromWaitList(p Client)
 }
 
 type gameHandler struct {
-	games   map[string]chess.Chess
-	players *onlinePlayerStorage
-
+	players  *onlinePlayerStorage
 	waitList WaitList
-
-	eventCh chan EventMsg
+	eventCh  chan EventMsg
 }
 
 func NewGameHandler(wl WaitList) GameHandler {
 	h := &gameHandler{
 		players:  NewOnlinePlayerStorage(),
-		games:    map[string]chess.Chess{},
 		waitList: wl,
 		eventCh:  make(chan EventMsg),
 	}
 
 	return h
 }
-func (h *gameHandler) Register(p *player) {
+func (h *gameHandler) Register(p Client, user auth.User) {
 	msg := EventMsg{
 		Type: RegisterEventType,
-		Body: RegisterEventMsg{Player: p},
+		Body: RegisterEventMsg{Player: p, User: user},
 	}
 	h.eventCh <- msg
 }
 
-func (h *gameHandler) UnRegister(p *player) {
+func (h *gameHandler) UnRegister(p Client) {
 	msg := EventMsg{
-		Type: UnRegisterEventType,
+		Type: UnRegisterEvent,
 		Body: UnRegisterEventMsg{Player: p},
 	}
 	h.eventCh <- msg
 }
 
-func (h *gameHandler) Play(p *player, gameId string, move chess.Move) {
+func (h *gameHandler) Play(p Client, move chess.Move) {
 	msg := EventMsg{
-		Type: PlayEventType,
+		Type: PlayEvent,
 		Body: PlayEventMsg{
 			Player: p,
-			GameId: gameId,
 			Move:   move,
 		},
 	}
 	h.eventCh <- msg
 }
 
-func (h *gameHandler) ExitGame(gameId string, p *player) {
+func (h *gameHandler) Exit(p Client) {
 	msg := EventMsg{
-		Type: ExitGameEventType,
-		Body: ExitGameEventMsg{
+		Type: ExitEvent,
+		Body: ExitEventMsg{
 			Player: p,
-			GameId: gameId,
 		},
 	}
 	h.eventCh <- msg
 }
 
-func (h *gameHandler) AddToWaitList(p *player, gs GameSetting) {
+func (h *gameHandler) AddToWaitList(p Client, gs GameSetting) {
 	msg := EventMsg{
-		Type: JoinWaitListEventType,
+		Type: JoinWaitListEvent,
 		Body: JoinWaitListEventMsg{
 			Player:      p,
 			GameSetting: gs,
@@ -191,9 +177,9 @@ func (h *gameHandler) AddToWaitList(p *player, gs GameSetting) {
 	h.eventCh <- msg
 }
 
-func (h *gameHandler) RemoveFromWaitList(p *player) {
+func (h *gameHandler) RemoveFromWaitList(p Client) {
 	msg := EventMsg{
-		Type: LeaveWaitListEventType,
+		Type: LeaveWaitListEvent,
 		Body: LeaveWaitListEventMsg{
 			Player: p,
 		},
@@ -207,147 +193,93 @@ func (h *gameHandler) Start() {
 		switch event.Type {
 		case RegisterEventType:
 			body := event.Body.(RegisterEventMsg)
-			h.handleRegister(body.Player)
-		case UnRegisterEventType:
+			h.handleRegister(body.Player, body.User)
+		case UnRegisterEvent:
 			body := event.Body.(UnRegisterEventMsg)
 			h.handleUnregister(body.Player)
-		case PlayEventType:
+		case PlayEvent:
 			body := event.Body.(PlayEventMsg)
-			h.handlePlayerMove(body.Player, body.Move, body.GameId)
-		case JoinWaitListEventType:
+			h.handlePlayerMove(body.Player, body.Move)
+		case JoinWaitListEvent:
 			body := event.Body.(JoinWaitListEventMsg)
 			h.handleWait(body.Player, body.GameSetting)
-		case LeaveWaitListEventType:
+		case LeaveWaitListEvent:
 			body := event.Body.(LeaveWaitListEventMsg)
 			h.handleExitWaitList(body.Player)
-		case ExitGameEventType:
-			body := event.Body.(ExitGameEventMsg)
-			h.handleExitGame(body.Player, body.GameId)
+		case ExitEvent:
+			body := event.Body.(ExitEventMsg)
+			h.handleExit(body.Player)
 		}
 	}
 }
-
-func (h *gameHandler) handleUnregister(p *player) {
-	playerId := p.GetId()
-	if h.players.Exists(playerId) {
-		h.waitList.FindAndDelete(p)
-		for gameId, g := range h.games {
-			if g.InGame(playerId) {
-				h.handleExitGame(p, gameId)
-			}
-		}
-		h.players.Remove(playerId)
-	}
+func (h *gameHandler) handleRegister(c Client, user auth.User) {
+	op := &onlinePlayer{client: c, status: StatusConnected, user: user}
+	h.players.Add(c, op)
 }
 
-func (h *gameHandler) handleRegister(p *player) {
-	h.players.Add(p.GetId(), p)
+func (h *gameHandler) handleUnregister(p Client) {
+	h.handleExit(p)
+	h.players.Remove(p)
 }
 
-func (h *gameHandler) publishGameFinished(g chess.Chess) {
-	color := g.GetWinner()
-	for _, playerId := range g.GetPlayers() {
-		if p := h.players.Get(playerId); p != nil {
-			p.End <- endMsg{
-				Winner: color.String(),
-				Score:  10,
-				Reason: "Won",
-			}
-		}
-	}
-}
-
-func (h *gameHandler) handlePlayerMove(p *player, move chess.Move, gameId string) {
-	g, found := h.games[gameId]
-	if !found {
-		p.Err <- fmt.Errorf("game not found")
+func (h *gameHandler) handlePlayerMove(c Client, move chess.Move) {
+	player := h.players.Get(c)
+	if player.status != StatusPlaying {
+		player.client.SendErr(fmt.Errorf("you're not in any game"))
 		return
 	}
 
-	if err := g.Play(p.GetId(), move); err != nil {
-		p.Err <- err
+	if err := player.currentGame.Play(player, move); err != nil {
+		log.Printf("onlineGame.Play: %s", err.Error())
 		return
-	}
-
-	p.Send <- map[string]string{
-		"message": fmt.Sprintf("you played %d", move),
-	}
-	for _, playerId := range g.GetPlayers() {
-		if playerId != p.GetId() {
-			if p := h.players.Get(playerId); p != nil {
-				p.Send <- map[string]any{
-					"type": "played",
-					"payload": map[string]any{
-						"player": p.GetName(),
-						"move":   move,
-					},
-				}
-			}
-		}
-	}
-
-	if g.IsFinished() {
-		h.publishGameFinished(g)
-	}
-}
-
-func (h *gameHandler) startNewGame(p1, p2 *player, gs GameSetting) {
-	gameId := uuid.New().String()
-
-	g := chess.NewSession([]string{p1.GetId(), p2.GetId()}, gs.Duration)
-
-	h.games[gameId] = g
-
-	p1.Join <- joinMsg{
-		GameId:   gameId,
-		Opponent: p2.GetName(),
-		Color:    chess.White.String(),
-	}
-	p2.Join <- joinMsg{
-		GameId:   gameId,
-		Opponent: p1.GetName(),
-		Color:    chess.Black.String(),
 	}
 }
 
 func createWaitListKey(gs GameSetting) string {
 	return fmt.Sprintf("<%d>", gs.Duration)
 }
-func (h *gameHandler) handleWait(p *player, gs GameSetting) {
-	p2, err := h.waitList.Pop(createWaitListKey(gs))
 
-	// Wait list is empty
-	if err != nil {
-		if err := h.waitList.Add(createWaitListKey(gs), p); err != nil {
-			p.Err <- err
-		}
+func (h *gameHandler) handleWait(c Client, gs GameSetting) {
+	player := h.players.Get(c)
+
+	if player.status == StatusWaiting {
+		c.SendErr(fmt.Errorf("already in a waiting list"))
 		return
 	}
 
-	h.startNewGame(p, p2, gs)
-}
-func (h *gameHandler) handleExitGame(p *player, gameId string) {
-	g := h.games[gameId]
-
-	winner, err := g.Exit(p.GetId())
-	if err != nil {
+	if player.status == StatusPlaying {
+		c.SendErr(fmt.Errorf("already in a game"))
 		return
 	}
 
-	for _, playerId := range g.GetPlayers() {
-		if p := h.players.Get(playerId); p != nil {
-			p.End <- endMsg{
-				Reason: "abundant",
-				Score:  10,
-				Winner: winner.String(),
-			}
+	c2, err := h.waitList.Pop(createWaitListKey(gs))
+
+	// Wait, list is empty
+	if err != nil {
+		if err := h.waitList.Add(createWaitListKey(gs), c); err != nil {
+			c.SendErr(err)
 		}
+		player.status = StatusWaiting
+		return
 	}
 
-	delete(h.games, gameId)
+	player2 := h.players.Get(c2)
+	NewOnlineGame(player, player2, gs.Duration)
 }
-func (h *gameHandler) handleExitWaitList(p *player) {
-	if err := h.waitList.Remove(p); err != nil {
-		p.Err <- err
+
+func (h *gameHandler) handleExit(c Client) {
+	player := h.players.Get(c)
+
+	if player.status == StatusWaiting {
+		h.waitList.Remove(c)
+		player.status = StatusConnected
+	} else if player.status == StatusPlaying {
+		g := player.currentGame
+		g.Exit(player)
+	}
+}
+func (h *gameHandler) handleExitWaitList(c Client) {
+	if err := h.waitList.Remove(c); err != nil {
+		c.SendErr(err)
 	}
 }
