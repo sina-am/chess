@@ -62,19 +62,48 @@ func (s *onlinePlayerStorage) Remove(id string) {
 	close(p.End)
 }
 
-type playMoveMsg struct {
-	player *player
-	gameId string
-	move   chess.Move
-}
-type startGameMsg struct {
-	player      *player
-	gameSetting GameSetting
+type EventType int
+
+const (
+	RegisterEventType EventType = iota
+	UnRegisterEventType
+	PlayEventType
+	JoinWaitListEventType
+	LeaveWaitListEventType
+	ExitGameEventType
+)
+
+type EventMsg struct {
+	Type EventType
+	Body any
 }
 
-type exitGameMsg struct {
-	gameId string
-	player *player
+type RegisterEventMsg struct {
+	Player *player
+}
+
+type UnRegisterEventMsg struct {
+	Player *player
+}
+
+type JoinWaitListEventMsg struct {
+	Player      *player
+	GameSetting GameSetting
+}
+
+type LeaveWaitListEventMsg struct {
+	Player *player
+}
+
+type ExitGameEventMsg struct {
+	Player *player
+	GameId string
+}
+
+type PlayEventMsg struct {
+	Player *player
+	GameId string
+	Move   chess.Move
 }
 
 type GameSetting struct {
@@ -99,64 +128,101 @@ type gameHandler struct {
 
 	waitList WaitList
 
-	waitListCh     chan startGameMsg
-	exitWaitListCh chan *player
-	registerCh     chan *player
-	unregisterCh   chan *player
-	exitGameCh     chan exitGameMsg
-	playMoveCh     chan playMoveMsg
+	eventCh chan EventMsg
 }
 
 func NewGameHandler(wl WaitList) GameHandler {
 	h := &gameHandler{
-		games:   map[string]chess.Chess{},
-		players: NewOnlinePlayerStorage(),
-
-		waitList:       wl,
-		waitListCh:     make(chan startGameMsg),
-		exitWaitListCh: make(chan *player),
-		exitGameCh:     make(chan exitGameMsg),
-		playMoveCh:     make(chan playMoveMsg),
-		registerCh:     make(chan *player),
-		unregisterCh:   make(chan *player),
+		players:  NewOnlinePlayerStorage(),
+		games:    map[string]chess.Chess{},
+		waitList: wl,
+		eventCh:  make(chan EventMsg),
 	}
 
 	return h
 }
 func (h *gameHandler) Register(p *player) {
-	h.registerCh <- p
+	msg := EventMsg{
+		Type: RegisterEventType,
+		Body: RegisterEventMsg{Player: p},
+	}
+	h.eventCh <- msg
 }
+
 func (h *gameHandler) UnRegister(p *player) {
-	h.unregisterCh <- p
+	msg := EventMsg{
+		Type: UnRegisterEventType,
+		Body: UnRegisterEventMsg{Player: p},
+	}
+	h.eventCh <- msg
 }
-func (h *gameHandler) Play(player *player, gameId string, move chess.Move) {
-	h.playMoveCh <- playMoveMsg{player: player, gameId: gameId, move: move}
+
+func (h *gameHandler) Play(p *player, gameId string, move chess.Move) {
+	msg := EventMsg{
+		Type: PlayEventType,
+		Body: PlayEventMsg{
+			Player: p,
+			GameId: gameId,
+			Move:   move,
+		},
+	}
+	h.eventCh <- msg
 }
+
 func (h *gameHandler) ExitGame(gameId string, p *player) {
-	h.exitGameCh <- exitGameMsg{player: p, gameId: gameId}
+	msg := EventMsg{
+		Type: ExitGameEventType,
+		Body: ExitGameEventMsg{
+			Player: p,
+			GameId: gameId,
+		},
+	}
+	h.eventCh <- msg
 }
+
 func (h *gameHandler) AddToWaitList(p *player, gs GameSetting) {
-	h.waitListCh <- startGameMsg{player: p, gameSetting: gs}
+	msg := EventMsg{
+		Type: JoinWaitListEventType,
+		Body: JoinWaitListEventMsg{
+			Player:      p,
+			GameSetting: gs,
+		},
+	}
+	h.eventCh <- msg
 }
+
 func (h *gameHandler) RemoveFromWaitList(p *player) {
-	h.exitWaitListCh <- p
+	msg := EventMsg{
+		Type: LeaveWaitListEventType,
+		Body: LeaveWaitListEventMsg{
+			Player: p,
+		},
+	}
+	h.eventCh <- msg
 }
 
 func (h *gameHandler) Start() {
 	for {
-		select {
-		case p := <-h.registerCh:
-			h.handleRegister(p)
-		case p := <-h.unregisterCh:
-			h.handleUnregister(p)
-		case pm := <-h.playMoveCh:
-			h.handlePlayerMove(pm.player, pm.move, pm.gameId)
-		case msg := <-h.waitListCh:
-			h.handleWait(msg.player, msg.gameSetting)
-		case p := <-h.exitWaitListCh:
-			h.handleExitWaitList(p)
-		case msg := <-h.exitGameCh:
-			h.handleExitGame(msg.player, msg.gameId)
+		event := <-h.eventCh
+		switch event.Type {
+		case RegisterEventType:
+			body := event.Body.(RegisterEventMsg)
+			h.handleRegister(body.Player)
+		case UnRegisterEventType:
+			body := event.Body.(UnRegisterEventMsg)
+			h.handleUnregister(body.Player)
+		case PlayEventType:
+			body := event.Body.(PlayEventMsg)
+			h.handlePlayerMove(body.Player, body.Move, body.GameId)
+		case JoinWaitListEventType:
+			body := event.Body.(JoinWaitListEventMsg)
+			h.handleWait(body.Player, body.GameSetting)
+		case LeaveWaitListEventType:
+			body := event.Body.(LeaveWaitListEventMsg)
+			h.handleExitWaitList(body.Player)
+		case ExitGameEventType:
+			body := event.Body.(ExitGameEventMsg)
+			h.handleExitGame(body.Player, body.GameId)
 		}
 	}
 }
