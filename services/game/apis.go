@@ -1,21 +1,20 @@
 package game
 
 import (
-	"log"
 	"net/http"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/labstack/echo/v4"
+	"github.com/sina-am/chess/auth"
 	"github.com/sina-am/chess/core"
-	"github.com/sina-am/chess/services/users"
 )
 
 type APIService struct {
 	WsUpgrader    websocket.Upgrader
 	GameHandler   GameHandler
 	Renderer      core.Renderer
-	Authenticator users.Authenticator
+	Authenticator auth.Authenticator
 }
 
 func (s *APIService) GameOptions(c echo.Context) error {
@@ -41,6 +40,10 @@ func (s *APIService) StartGame(c echo.Context) error {
 		"user":     s.Authenticator.GetUser(c),
 	})
 }
+func (s *APIService) GetPlayers(c echo.Context) error {
+	playersOut := map[string]string{}
+	return c.JSON(http.StatusOK, playersOut)
+}
 
 func (s *APIService) Home(c echo.Context) error {
 	user := s.Authenticator.GetUser(c)
@@ -56,13 +59,12 @@ func (s *APIService) WebSocketAPI(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("new player %s connected", conn.RemoteAddr())
+	c.Logger().Debug("new player %s connected", conn.RemoteAddr())
 
-	p := NewPlayer(conn, s.GameHandler)
+	user := s.Authenticator.GetUser(c)
+	p := NewPlayer(conn, s.GameHandler, user)
 
 	p.gameHandler.Register(p)
-
-	go p.ReadConn()
-	go p.WriteConn()
+	p.StartLoop(c.Request().Context())
 	return nil
 }

@@ -3,13 +3,14 @@ package game
 import (
 	"testing"
 
+	"github.com/sina-am/chess/auth"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestQueueAdd(t *testing.T) {
 	queue := NewMemoryWaitList()
 
-	p := NewPlayer(nil, nil)
+	p := NewPlayer(nil, nil, auth.NewAnonymousUser())
 	key := "<10>"
 	queue.Add(key, p)
 
@@ -18,7 +19,7 @@ func TestQueueAdd(t *testing.T) {
 func TestQueueRemove(t *testing.T) {
 	queue := NewMemoryWaitList()
 
-	p := NewPlayer(nil, nil)
+	p := NewPlayer(nil, nil, auth.NewAnonymousUser())
 	keys := []string{"<10>", "<20>", "<30>"}
 	for _, key := range keys {
 		queue.Add(key, p)
@@ -34,9 +35,9 @@ func TestQueuePop(t *testing.T) {
 	queue := NewMemoryWaitList()
 
 	players := []*player{
-		NewPlayer(nil, nil),
-		NewPlayer(nil, nil),
-		NewPlayer(nil, nil),
+		NewPlayer(nil, nil, auth.NewAnonymousUser()),
+		NewPlayer(nil, nil, auth.NewAnonymousUser()),
+		NewPlayer(nil, nil, auth.NewAnonymousUser()),
 	}
 	key := "<10>"
 

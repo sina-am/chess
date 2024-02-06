@@ -1,14 +1,15 @@
 package game
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/sina-am/chess/auth"
 	"github.com/sina-am/chess/chess"
 )
 
@@ -39,33 +40,34 @@ type endMsg struct {
 
 type playerInfo struct {
 	mu            sync.RWMutex
-	name          string
+	Name          string `json:"name"`
 	currentGameId string
 	status        PlayerStatus
 }
-
 type player struct {
-	conn *websocket.Conn
-	id   string
-	info playerInfo
-	Send chan any
-	Join chan joinMsg
-	Err  chan error
-	End  chan endMsg
+	conn  *websocket.Conn
+	user  auth.User
+	info  playerInfo
+	Send  chan any
+	Join  chan joinMsg
+	Err   chan error
+	End   chan endMsg
+	Close chan error
 
 	gameHandler GameHandler
 	msgHandler  map[string]func(message) error
 }
 
-func NewPlayer(conn *websocket.Conn, gamHandler GameHandler) *player {
+func NewPlayer(conn *websocket.Conn, gamHandler GameHandler, user auth.User) *player {
 	p := &player{
 		conn:        conn,
+		user:        user,
 		gameHandler: gamHandler,
 		Send:        make(chan any),
 		Join:        make(chan joinMsg),
 		Err:         make(chan error),
 		End:         make(chan endMsg),
-		id:          uuid.New().String(),
+		Close:       make(chan error),
 		info: playerInfo{
 			mu:     sync.RWMutex{},
 			status: StatusConnected,
@@ -79,17 +81,24 @@ func NewPlayer(conn *websocket.Conn, gamHandler GameHandler) *player {
 	return p
 }
 func (p *player) GetId() string {
-	return p.id
+	return p.user.GetId().Hex()
 }
 
 func (p *player) GetName() string {
 	p.info.mu.RLock()
 	defer p.info.mu.RUnlock()
 
-	return p.info.name
+	return p.info.Name
 }
 
-func (p *player) ReadConn() {
+func (p *player) StartLoop(ctx context.Context) {
+	ctx, cancel := context.WithCancel(ctx)
+
+	go p.readConn(ctx)
+	go p.writeConn(ctx, cancel)
+}
+
+func (p *player) readConn(ctx context.Context) {
 	defer func() {
 		log.Printf("player %s disconnected", p.conn.RemoteAddr())
 		p.gameHandler.UnRegister(p)
@@ -114,10 +123,9 @@ func (p *player) ReadConn() {
 	}
 }
 
-func (p *player) WriteConn() {
+func (p *player) writeConn(ctx context.Context, cancel context.CancelFunc) {
 	defer func() {
-		p.conn.Close()
-		p.gameHandler.UnRegister(p)
+		cancel()
 	}()
 
 	for {
@@ -166,6 +174,14 @@ func (p *player) WriteConn() {
 				"type":    "ended",
 				"payload": msg,
 			})
+		case msg, ok := <-p.Close:
+			if !ok {
+				break
+			}
+			p.conn.WriteJSON(map[string]string{
+				"closed": msg.Error(),
+			})
+			return
 		}
 	}
 }
@@ -215,11 +231,11 @@ func (p *player) handleStart(msg message) error {
 	}
 
 	p.info.status = StatusWaiting
-	p.info.name = payload.Name
+	p.info.Name = payload.Name
 	p.gameHandler.AddToWaitList(p, GameSetting{Duration: duration})
 
 	p.Send <- map[string]string{
-		"message": fmt.Sprintf("Id: %s", p.id),
+		"message": fmt.Sprintf("Id: %s", p.user.GetId().Hex()),
 	}
 	return nil
 }

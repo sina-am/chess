@@ -1,4 +1,4 @@
-package users
+package auth
 
 import (
 	"context"
@@ -19,10 +19,15 @@ var (
 )
 
 type Authenticator interface {
-	Authenticate(ctx context.Context, token string) (*User, error)
-	ObtainToken(user *User) (string, error)
-	Login(c echo.Context, user *User) error
-	GetUser(c echo.Context) UserI
+	Authenticate(ctx context.Context, token string) (User, error)
+	ObtainToken(user User) (string, error)
+	Login(c echo.Context, user User) error
+	GetUser(c echo.Context) User
+	AuthenticationMiddleware(next echo.HandlerFunc) echo.HandlerFunc
+}
+
+type UserFetcher interface {
+	GetUserById(ctx context.Context, id primitive.ObjectID) (User, error)
 }
 
 type JwtToken struct {
@@ -32,20 +37,20 @@ type JwtToken struct {
 
 type jwtAuthentication struct {
 	secretKey []byte
-	storage   Storage
+	fetcher   UserFetcher
 }
 
-func NewJWTAuthentication(secretKey string, storage Storage) *jwtAuthentication {
+func NewJWTAuthentication(secretKey string, userFetcher UserFetcher) *jwtAuthentication {
 	return &jwtAuthentication{
 		secretKey: []byte(secretKey),
-		storage:   storage,
+		fetcher:   userFetcher,
 	}
 
 }
 
-func (auth *jwtAuthentication) ObtainToken(user *User) (string, error) {
+func (auth *jwtAuthentication) ObtainToken(user User) (string, error) {
 	jwtToken := JwtToken{
-		UserId:    user.Id,
+		UserId:    user.GetId(),
 		ExpiredAt: time.Now().Add(time.Hour * 6),
 	}
 
@@ -61,7 +66,7 @@ func (auth *jwtAuthentication) Encode(jwtToken JwtToken) (string, error) {
 	return token.SignedString(auth.secretKey)
 }
 
-func (auth *jwtAuthentication) Authenticate(ctx context.Context, tokenStr string) (*User, error) {
+func (auth *jwtAuthentication) Authenticate(ctx context.Context, tokenStr string) (User, error) {
 	if tokenStr == "" {
 		return nil, ErrInvalidToken
 	}
@@ -75,9 +80,9 @@ func (auth *jwtAuthentication) Authenticate(ctx context.Context, tokenStr string
 		return nil, ErrExpiredToken
 	}
 
-	user, err := auth.storage.GetUserById(ctx, token.UserId)
+	user, err := auth.fetcher.GetUserById(ctx, token.UserId)
 	if err != nil {
-		return nil, ErrInvalidToken
+		return &anonymousUser{id: token.UserId}, nil
 	}
 	return user, nil
 }
@@ -137,7 +142,7 @@ func IsExpired(t time.Time) error {
 	return nil
 }
 
-func (auth *jwtAuthentication) Login(c echo.Context, user *User) error {
+func (auth *jwtAuthentication) Login(c echo.Context, user User) error {
 	token, err := auth.ObtainToken(user)
 	if err != nil {
 		return err
@@ -146,16 +151,30 @@ func (auth *jwtAuthentication) Login(c echo.Context, user *User) error {
 	return nil
 }
 
-func (auth *jwtAuthentication) GetUser(c echo.Context) UserI {
-	cookie, err := c.Cookie("sessionID")
-	if err != nil {
-		return NewAnonymousUser()
-	}
+func (auth *jwtAuthentication) GetUser(c echo.Context) User {
+	user := c.Get("user")
+	return user.(User)
+}
 
-	user, err := auth.Authenticate(c.Request().Context(), cookie.Value)
-	if err != nil {
-		return NewAnonymousUser()
-	}
+func (auth *jwtAuthentication) AuthenticationMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		cookie, err := c.Cookie("sessionID")
+		if err != nil {
+			user := NewAnonymousUser()
+			auth.Login(c, user)
+			c.Set("user", user)
+			return next(c)
+		}
 
-	return user
+		user, err := auth.Authenticate(c.Request().Context(), cookie.Value)
+		if err != nil {
+			user = NewAnonymousUser()
+			auth.Login(c, user)
+			c.Set("user", user)
+			return next(c)
+		}
+
+		c.Set("user", user)
+		return next(c)
+	}
 }

@@ -2,11 +2,65 @@ package game
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/sina-am/chess/chess"
 )
+
+type onlinePlayerStorage struct {
+	mu      sync.Mutex
+	players map[string]*player
+}
+
+func NewOnlinePlayerStorage() *onlinePlayerStorage {
+	return &onlinePlayerStorage{
+		mu:      sync.Mutex{},
+		players: map[string]*player{},
+	}
+}
+
+func (s *onlinePlayerStorage) Exists(id string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, ok := s.players[id]
+	return ok
+}
+
+func (s *onlinePlayerStorage) Add(id string, p *player) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if oldPlayer, ok := s.players[id]; ok {
+		oldPlayer.Close <- fmt.Errorf("you connected with another connection")
+	}
+	s.players[id] = p
+}
+
+func (s *onlinePlayerStorage) Get(id string) *player {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.players[id]
+}
+
+func (s *onlinePlayerStorage) Remove(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	p, ok := s.players[id]
+	if !ok {
+		return
+	}
+
+	delete(s.players, id)
+	close(p.Send)
+	close(p.Err)
+	close(p.Join)
+	close(p.End)
+}
 
 type playMoveMsg struct {
 	player *player
@@ -41,7 +95,7 @@ type GameHandler interface {
 
 type gameHandler struct {
 	games   map[string]chess.Chess
-	players map[string]*player
+	players *onlinePlayerStorage
 
 	waitList WaitList
 
@@ -56,7 +110,7 @@ type gameHandler struct {
 func NewGameHandler(wl WaitList) GameHandler {
 	h := &gameHandler{
 		games:   map[string]chess.Chess{},
-		players: map[string]*player{},
+		players: NewOnlinePlayerStorage(),
 
 		waitList:       wl,
 		waitListCh:     make(chan startGameMsg),
@@ -69,7 +123,6 @@ func NewGameHandler(wl WaitList) GameHandler {
 
 	return h
 }
-
 func (h *gameHandler) Register(p *player) {
 	h.registerCh <- p
 }
@@ -88,6 +141,7 @@ func (h *gameHandler) AddToWaitList(p *player, gs GameSetting) {
 func (h *gameHandler) RemoveFromWaitList(p *player) {
 	h.exitWaitListCh <- p
 }
+
 func (h *gameHandler) Start() {
 	for {
 		select {
@@ -106,30 +160,28 @@ func (h *gameHandler) Start() {
 		}
 	}
 }
+
 func (h *gameHandler) handleUnregister(p *player) {
 	playerId := p.GetId()
-	if _, ok := h.players[playerId]; ok {
+	if h.players.Exists(playerId) {
 		h.waitList.FindAndDelete(p)
 		for gameId, g := range h.games {
 			if g.InGame(playerId) {
 				h.handleExitGame(p, gameId)
 			}
 		}
-		delete(h.players, playerId)
-		close(p.Send)
-		close(p.Err)
-		close(p.Join)
-		close(p.End)
+		h.players.Remove(playerId)
 	}
 }
+
 func (h *gameHandler) handleRegister(p *player) {
-	h.players[p.GetId()] = p
+	h.players.Add(p.GetId(), p)
 }
 
 func (h *gameHandler) publishGameFinished(g chess.Chess) {
 	color := g.GetWinner()
 	for _, playerId := range g.GetPlayers() {
-		if p, ok := h.players[playerId]; ok {
+		if p := h.players.Get(playerId); p != nil {
 			p.End <- endMsg{
 				Winner: color.String(),
 				Score:  10,
@@ -156,7 +208,7 @@ func (h *gameHandler) handlePlayerMove(p *player, move chess.Move, gameId string
 	}
 	for _, playerId := range g.GetPlayers() {
 		if playerId != p.GetId() {
-			if p, ok := h.players[playerId]; ok {
+			if p := h.players.Get(playerId); p != nil {
 				p.Send <- map[string]any{
 					"type": "played",
 					"payload": map[string]any{
@@ -217,7 +269,7 @@ func (h *gameHandler) handleExitGame(p *player, gameId string) {
 	}
 
 	for _, playerId := range g.GetPlayers() {
-		if p, ok := h.players[playerId]; ok {
+		if p := h.players.Get(playerId); p != nil {
 			p.End <- endMsg{
 				Reason: "abundant",
 				Score:  10,

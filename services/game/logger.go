@@ -31,7 +31,6 @@ func (h *loggerHandler) UnRegister(p *player) {
 	h.logger.Info("player disconnected", zap.String("playerID", p.GetId()))
 	h.next.UnRegister(p)
 }
-
 func (h *loggerHandler) Play(p *player, gameId string, move chess.Move) {
 	h.next.Play(p, gameId, move)
 }

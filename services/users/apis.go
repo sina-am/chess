@@ -5,21 +5,16 @@ import (
 	"net/http"
 
 	"github.com/labstack/echo/v4"
+	"github.com/sina-am/chess/auth"
 	"github.com/sina-am/chess/core"
+	"github.com/sina-am/chess/storage"
+	"github.com/sina-am/chess/types"
 )
 
 type APIService struct {
-	Storage       Storage
-	Authenticator Authenticator
+	Storage       storage.Storage
+	Authenticator auth.Authenticator
 	Renderer      core.Renderer
-}
-
-func NewAPIs(storage Storage, auth Authenticator, renderer core.Renderer) *APIService {
-	return &APIService{
-		Storage:       storage,
-		Authenticator: auth,
-		Renderer:      renderer,
-	}
 }
 
 func (s *APIService) RegistrationAPI(c echo.Context) error {
@@ -31,7 +26,7 @@ func (s *APIService) RegistrationAPI(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"message": err.Error()})
 	}
 
-	user := NewUser(userReq.Email, userReq.Name, userReq.Password)
+	user := types.NewUser(userReq.Email, userReq.Name, userReq.Password)
 	if err := s.Storage.InsertUser(c.Request().Context(), user); err != nil {
 		return err
 	}
@@ -52,7 +47,7 @@ func (s *APIService) AuthenticationPOST(c echo.Context) error {
 	}
 	user, err := s.Storage.AuthenticateUser(c.Request().Context(), authReq.Email, authReq.Password)
 	if err != nil {
-		if errors.Is(err, ErrAuthentication) {
+		if errors.Is(err, storage.ErrAuthentication) {
 			return s.Renderer.Render(c, "login.html", map[string]any{
 				"error": err.Error(),
 			})
