@@ -3,13 +3,18 @@ package game
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"log"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/sina-am/chess/auth"
 	"github.com/sina-am/chess/chess"
+)
+
+var (
+	ErrInvalidType    = errors.New("invalid type")
+	ErrInvalidPayload = errors.New("invalid payload")
 )
 
 type message struct {
@@ -65,10 +70,8 @@ func (p *WSClient) SendErr(err error) {
 }
 
 func (p *WSClient) StartLoop(ctx context.Context) {
-	ctx, cancel := context.WithCancel(ctx)
-
 	go p.readConn(ctx)
-	go p.writeConn(ctx, cancel)
+	go p.writeConn(ctx)
 }
 
 func (p *WSClient) readConn(ctx context.Context) {
@@ -96,35 +99,28 @@ func (p *WSClient) readConn(ctx context.Context) {
 	}
 }
 
-func (p *WSClient) writeConn(ctx context.Context, cancel context.CancelFunc) {
+func (p *WSClient) writeConn(ctx context.Context) {
 	defer func() {
-		cancel()
+		log.Printf("Go routine exited")
 	}()
 
 	for {
 		select {
 		case msg, ok := <-p.send:
 			if !ok {
-				p.conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
-
 			if err := p.conn.WriteJSON(msg); err != nil {
 				return
 			}
-
 		case err, ok := <-p.err:
 			if !ok {
 				break
 			}
-			p.conn.WriteJSON(map[string]string{"error": err.Error()})
-		case msg, ok := <-p.close:
-			if !ok {
-				break
+			if err := p.conn.WriteJSON(map[string]string{"error": err.Error()}); err != nil {
+				return
 			}
-			p.conn.WriteJSON(map[string]string{
-				"closed": msg.Error(),
-			})
+		case <-p.close:
 			return
 		}
 	}
@@ -139,7 +135,7 @@ type StartGameMessage struct {
 func (p *WSClient) handleMessage(msg message) error {
 	handler, found := p.msgHandler[msg.Type]
 	if !found {
-		return fmt.Errorf("invalid message type")
+		return ErrInvalidType
 	}
 	return handler(msg)
 }
@@ -147,7 +143,7 @@ func (p *WSClient) handleMessage(msg message) error {
 func (p *WSClient) handleStart(msg message) error {
 	payload := StartGameMessage{}
 	if err := json.Unmarshal(msg.Payload, &payload); err != nil {
-		return err
+		return ErrInvalidPayload
 	}
 
 	duration := 0 * time.Minute
@@ -161,7 +157,7 @@ func (p *WSClient) handleStart(msg message) error {
 	case 1:
 		duration = 1 * time.Minute
 	default:
-		return fmt.Errorf("invalid time duration")
+		return ErrInvalidPayload
 	}
 
 	p.gameHandler.AddToWaitList(p, GameSetting{Duration: duration})

@@ -224,6 +224,11 @@ func (h *gameHandler) handleUnregister(p Client) {
 
 func (h *gameHandler) handlePlayerMove(c Client, move chess.Move) {
 	player := h.players.Get(c)
+	if player == nil {
+		log.Printf("player with client %v is not in the players list", c)
+		return
+	}
+
 	if player.status != StatusPlaying {
 		player.client.SendErr(fmt.Errorf("you're not in any game"))
 		return
@@ -241,6 +246,10 @@ func createWaitListKey(gs GameSetting) string {
 
 func (h *gameHandler) handleWait(c Client, gs GameSetting) {
 	player := h.players.Get(c)
+	if player == nil {
+		log.Printf("player with client %v is not in the players list", c)
+		return
+	}
 
 	if player.status == StatusWaiting {
 		c.SendErr(fmt.Errorf("already in a waiting list"))
@@ -269,6 +278,10 @@ func (h *gameHandler) handleWait(c Client, gs GameSetting) {
 
 func (h *gameHandler) handleExit(c Client) {
 	player := h.players.Get(c)
+	if player == nil {
+		log.Printf("player with client %v is not in the players list", c)
+		return
+	}
 
 	if player.status == StatusWaiting {
 		h.waitList.Remove(c)
