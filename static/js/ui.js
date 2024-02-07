@@ -37,8 +37,7 @@ class ChessUI {
         this.ctx = this.canvas.getContext("2d");
         this.board = board;
         this.pickedPiece = null;
-        this.visitedSquire = null;
-        this.last_click = 0;
+        this.lastClick = 0;
 
         this.playerElem = playerElem;
         this.opponentElem = opponentElem;
@@ -46,6 +45,7 @@ class ChessUI {
     }
     setUp(player, opponent, game) {
         this.game = game;
+        this.viewAs = player.color;
         this.setUpBoard();
         this.setUpHandlers();
         this.setUpBar(player, opponent);
@@ -73,10 +73,85 @@ class ChessUI {
         this.render();
     }
 
+    changeBackground(x, y, color) {
+        this.drawSquire(x, y, color);
+        this.drawPiece(x, y, this.board[y][x])
+    }
+    gameOver(winner) {
+        this.gameStatusElem.innerText = `winner is ${winner}`;
+    }
+
+    isClicked() {
+        if((Date.now() - this.lastClick) < 10) {
+            return false
+        }
+        this.lastClick = Date.now()
+        return true;
+    }
+
+    setUpHandlers() {
+        const pickupPiece = (x, y) => {
+            if(this.game.isMyPiece({row: y, col: x})) {
+                this.changeBackground(x, y, SELECTED_SQUIRE_COLOR)
+                this.pickedPiece = {
+                    "piece": this.board[y][x],
+                    "location": {x: x, y: y},
+                }
+            } 
+        }
+        const dropPiece = (x, y) => {
+            this.changeBackground(
+                this.pickedPiece.location.x, 
+                this.pickedPiece.location.y,
+                getSquireColor(
+                    this.pickedPiece.location.x,
+                    this.pickedPiece.location.y,
+                ),
+            )
+            const played = this.game.play(
+                { row: this.pickedPiece.location.y, col: this.pickedPiece.location.x },
+                { row: y, col: x },
+            )
+
+            this.pickedPiece = null;
+            if(!played) {
+                console.log("invalid play")
+                return;
+            }
+
+            this.render();
+        }
+        this.canvas.addEventListener("click", (event) => {
+            if(!this.isClicked()) {
+                return;
+            }
+
+            const location = this.getClickedCoordination(event)
+            if(!location) {
+                this.pickedPiece = null;
+                return;
+            }
+
+            if (this.pickedPiece === null) {
+                pickupPiece(location.x, location.y);
+            } else {
+                dropPiece(location.x, location.y);
+            }
+        });
+    }
+
+
+    convertToBoardCoordination(x, y) {
+        const dy = (this.viewAs == "black")? 0: 7
+        return x, Math.abs(y - dy)
+    }
+
     drawSquire(x, y, color) {
+        x, y = this.convertToBoardCoordination(x, y)
         this.ctx.fillStyle = color;
         this.ctx.fillRect(x * SQUIRE_SIZE, y * SQUIRE_SIZE, SQUIRE_SIZE, SQUIRE_SIZE);
     }
+
     loadImage(x, y, piece) {
         let ctx = this.ctx;
         piece.image = new Image();
@@ -87,6 +162,7 @@ class ChessUI {
             piece.image.setAttribute("name", piece.name);
             piece.image.setAttribute("color", piece.color);
 
+            x, y = this.convertToBoardCoordination(x, y)
             ctx.drawImage(piece.image, x * SQUIRE_SIZE, y * SQUIRE_SIZE, piece.image.width, piece.image.height); 
         }
     }
@@ -102,72 +178,20 @@ class ChessUI {
             this.loadImage(x, y, piece);
             return;
         } 
+
+        x, y = this.convertToBoardCoordination(x, y)
         ctx.drawImage(piece.image, x * SQUIRE_SIZE, y * SQUIRE_SIZE, piece.image.width, piece.image.height); 
     }
-    changeBackground(x, y, color) {
-        this.drawSquire(x, y, color);
-        this.drawPiece(x, y, this.board[y][x])
-    }
-    gameOver(winner) {
-        this.gameStatusElem.innerText = `winner is ${winner}`;
-    }
 
-    isClicked() {
-        if((Date.now() - this.last_click) < 10) {
-            return false
+    getClickedCoordination(event) {
+        const rect = this.canvas.getBoundingClientRect();
+        let x = Math.floor((event.clientX - rect.x) / SQUIRE_SIZE)
+        let y = Math.floor((event.clientY - rect.y) / SQUIRE_SIZE)
+        if(x < 0 || x > 7 || y < 0 || y > 7) {
+            return null;
         }
-        this.last_click = Date.now()
-        return true;
-    }
 
-    setUpHandlers() {
-        this.canvas.addEventListener("click", (event) => {
-            if(!this.isClicked()) {
-                return;
-            }
-
-            if (this.pickedPiece === null) {
-                const rect = this.canvas.getBoundingClientRect();
-                let x = Math.floor((event.clientX - rect.x) / SQUIRE_SIZE)
-                let y = Math.floor((event.clientY - rect.y) / SQUIRE_SIZE)
-                if(x < 0 || x > 7 || y < 0 || y > 7) {
-                    return ;
-                }
-                if(this.game.isMyPiece({row: y, col: x})) {
-                    this.changeBackground(x, y, SELECTED_SQUIRE_COLOR)
-                    this.pickedPiece = {
-                        "piece": this.board[y][x],
-                        "location": {x: x, y: y},
-                    }
-                } 
-            } else {
-                this.changeBackground(
-                    this.pickedPiece.location.x, 
-                    this.pickedPiece.location.y,
-                    getSquireColor(
-                        this.pickedPiece.location.x,
-                        this.pickedPiece.location.y,
-                    ),
-                )
-                const rect = this.canvas.getBoundingClientRect();
-                let x = Math.floor((event.clientX - rect.x) / SQUIRE_SIZE)
-                let y = Math.floor((event.clientY - rect.y) / SQUIRE_SIZE)
-                if(x < 0 || x > 7 || y < 0 || y > 7) {
-                    this.pickedPiece = null;
-                    return ;
-                }
-                const played = this.game.play(
-                    { row: this.pickedPiece.location.y, col: this.pickedPiece.location.x },
-                    { row: y, col: x },
-                )
-                if(played) {
-                    this.render();
-                } else {
-                    console.log("invalid play")
-                }
-
-                this.pickedPiece = null;
-            }
-        });
+        x, y = this.convertToBoardCoordination(x, y)
+        return {x: x, y: y}
     }
 }
