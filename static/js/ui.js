@@ -27,11 +27,8 @@ function getSquireColor(x, y) {
 
 class ChessUI {
     constructor(boardElem, playerElem, opponentElem, gameStatusElem, board) {
-
         console.log("width: ", window.screen.width);
         console.log("height: ", window.screen.height);
-
-
         this.canvas = document.createElement("canvas");
         this.canvas.width = BOARD_SIZE;
         this.canvas.height = BOARD_SIZE
@@ -45,35 +42,35 @@ class ChessUI {
 
         this.playerElem = playerElem;
         this.opponentElem = opponentElem;
-        this.gameStatusElem = gameStatusElem
+        this.gameStatusElem = gameStatusElem;
     }
-    async setUp(player, opponent, game) {
+    setUp(player, opponent, game) {
         this.game = game;
-        await this.setUpBoard();
+        this.setUpBoard();
         this.setUpHandlers();
-        await this.setUpBar(player, opponent);
+        this.setUpBar(player, opponent);
     }
 
-    async setUpBar(player, opponent) {
+    setUpBar(player, opponent) {
         this.playerElem.innerText = player.name + " " + player.color;
         this.opponentElem.innerText = opponent.name + " " + opponent.color;
     }
 
-    async render() {
+    render() {
         this.ctx.reset()
         for (let x = 0; x < 8; x++) {
             for (let y = 0; y < 8; y++) {
                 this.drawSquire(x, y, getSquireColor(x, y));
                 let piece = this.board[y][x]
                 if (piece) {
-                    await this.drawPiece(x, y, piece);
+                    this.drawPiece(x, y, piece);
                 }
             }
         }
         this.isFirstRender = false
     }
-    async setUpBoard() {
-        await this.render();
+    setUpBoard() {
+        this.render();
     }
 
     drawSquire(x, y, color) {
@@ -93,9 +90,8 @@ class ChessUI {
             ctx.drawImage(piece.image, x * SQUIRE_SIZE, y * SQUIRE_SIZE, piece.image.width, piece.image.height); 
         }
     }
-    async drawPiece(x, y, piece) {
+    drawPiece(x, y, piece) {
         this.ctx.fillStyle = piece.color === "white" ? "#fff" : "#000";
-
         let ctx = this.ctx;
         if(!piece?.image) {
             this.loadImage(x, y, piece);
@@ -108,9 +104,9 @@ class ChessUI {
         } 
         ctx.drawImage(piece.image, x * SQUIRE_SIZE, y * SQUIRE_SIZE, piece.image.width, piece.image.height); 
     }
-    async changeBackground(x, y, color) {
+    changeBackground(x, y, color) {
         this.drawSquire(x, y, color);
-        await this.drawPiece(x, y, this.board[y][x])
+        this.drawPiece(x, y, this.board[y][x])
     }
     gameOver(winner) {
         this.gameStatusElem.innerText = `winner is ${winner}`;
@@ -125,7 +121,7 @@ class ChessUI {
     }
 
     setUpHandlers() {
-        this.canvas.addEventListener("click", async (event) => {
+        this.canvas.addEventListener("click", (event) => {
             if(!this.isClicked()) {
                 return;
             }
@@ -138,14 +134,14 @@ class ChessUI {
                     return ;
                 }
                 if(this.game.isMyPiece({row: y, col: x})) {
-                    await this.changeBackground(x, y, SELECTED_SQUIRE_COLOR)
+                    this.changeBackground(x, y, SELECTED_SQUIRE_COLOR)
                     this.pickedPiece = {
                         "piece": this.board[y][x],
                         "location": {x: x, y: y},
                     }
                 } 
             } else {
-                await this.changeBackground(
+                this.changeBackground(
                     this.pickedPiece.location.x, 
                     this.pickedPiece.location.y,
                     getSquireColor(
@@ -165,7 +161,7 @@ class ChessUI {
                     { row: y, col: x },
                 )
                 if(played) {
-                    await this.render();
+                    this.render();
                 } else {
                     console.log("invalid play")
                 }

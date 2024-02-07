@@ -7,7 +7,7 @@ class OfflineChess {
         this.ui = ui;
     }
 
-    async start() {
+    start() {
         if (Math.random() > 0.5) {
             this.player.color = "white";
             this.opponent.color = "black";
@@ -63,8 +63,8 @@ class OnlineChess {
         this.ui = ui;
         this.winner = null;
 
-        this.server.addMessageHandler(async (event) => {
-            await this.update(JSON.parse(event.data))
+        this.server.addMessageHandler((event) => {
+            this.update(JSON.parse(event.data))
         })
     }
 
@@ -104,7 +104,7 @@ class OnlineChess {
         return true
     }
 
-    async update(msg) {
+    update(msg) {
         switch (msg.type) {
             case "started":
                 this.onstart({ name: msg.payload.opponent, color: msg.payload.tile });
@@ -115,7 +115,7 @@ class OnlineChess {
                     msg.payload.move.from,
                     msg.payload.move.to,
                 )
-                await this.ui.render();
+                this.ui.render();
                 break;
             case "ended":
                 this.winner = msg.winner;
