@@ -79,19 +79,18 @@
     }
 
     function startGame(gameMode, playerName, gameDuration) {
-        console.log(gameMode, playerName);
-        const newChessSetup = structuredClone(chessSetup);
+        const board = NewChessBoard();
         const ui = new ChessUI(
             document.getElementById("chessBoard"),
             document.getElementById("playerName"),
             document.getElementById("opponentName"),
             document.getElementById("gameStatus"),
-            newChessSetup,
+            board,
         );
         if (gameMode === "online") {
             const SERVER_ADDR = "ws://localhost:8080/ws";
             const serverConnection = new ServerConnection(makeConnection(SERVER_ADDR));
-            const chess = new OnlineChess(ui, playerName, newChessSetup, serverConnection, parseInt(gameDuration));
+            const chess = new OnlineChess(ui, playerName, board, serverConnection, parseInt(gameDuration));
             setGameState("waiting");
             chess.start();
             document.getElementById("exitBtn").onclick = (event) => {
@@ -99,7 +98,7 @@
                 delete chess;
             };
         } else {
-            const chess = new OfflineChess(ui, playerName, newChessSetup);
+            const chess = new OfflineChess(ui, playerName, board);
             setGameState("started");
             chess.start();
             document.getElementById("exitBtn").onclick = (event) => {

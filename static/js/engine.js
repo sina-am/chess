@@ -8,9 +8,6 @@ const PAWN = "pawn";
 const KNIGHT = "knight";
 const ROOK = "rook";
 
-const rowNumbs = [8, 7, 6, 5, 4, 3, 2, 1]
-const colNumbs = ["a", "b", "c", "d", "e", "f", "g", "h"]
-
 const oppositeColor = (color) => (color === "black") ? "white": "black";
 
 class BoardLocation {
@@ -157,7 +154,6 @@ class ChessEngine {
                 right: true,
             },
         }
-        this.possibleMoves = {}
         this.findAllPossibleMoves()
     }
 
@@ -663,144 +659,54 @@ class ChessEngine {
     }
 }
 
-const chessSetup = [
-    [
-        {
-            name: 'rook', 
-            color: 'white',
-        }, 
-        {
-            name: 'knight',
-            color: 'white',
-        },
-        {
-            name: 'bishop',
-            color: 'white',
-        },
-        {
-            name: 'queen', 
-            color: 'white',
-        }, {
-            name: 'king',
-            color: 'white',
-        },
-        {
-            name: 'bishop',
-            color: 'white',
-        },
-        {
-            name: 'knight',
-            color: 'white',
-        },
-        {
-            name: 'rook', 
-            color: 'white',
+function mapChar2Piece(char) {
+    switch(char) {
+        case 'r':
+            return ROOK
+        case 'n':
+            return KNIGHT
+        case 'b':
+            return BISHOP 
+        case 'q':
+            return QUEEN
+        case 'k':
+            return KING
+        case 'p':
+            return PAWN
+    }
+}
+function mapChar2Color(char) {
+    switch(char) {
+        case 'w':
+            return WHITE
+        case 'b':
+            return BLACK
+    }
+}
+
+function NewChessBoard() {
+    const map = [
+        ['rw', 'nw', 'bw', 'qw', 'kw', 'bw', 'nw', 'rw'],
+        ['pw', 'pw', 'pw', 'pw', 'pw', 'pw', 'pw', 'pw'],
+        ['--', '--', '--', '--', '--', '--', '--', '--'],
+        ['--', '--', '--', '--', '--', '--', '--', '--'],
+        ['--', '--', '--', '--', '--', '--', '--', '--'],
+        ['--', '--', '--', '--', '--', '--', '--', '--'],
+        ['pb', 'pb', 'pb', 'pb', 'pb', 'pb', 'pb', 'pb'],
+        ['rb', 'nb', 'bb', 'qb', 'kb', 'bb', 'nb', 'rb'],
+    ]
+
+    const board = []
+    for(let i = 0; i < 8; i++) {
+        board.push([])
+        for(let j = 0; j < 8; j++) {
+            if(map[i][j] === '--') continue;
+            board[i].push({
+                name: mapChar2Piece(map[i][j][0]),
+                color: mapChar2Color(map[i][j][1]),
+                location: new BoardLocation(i, j),
+            });
         }
-    ],
-    [
-        {
-            name: 'pawn', 
-            color: 'white',
-        },
-        {
-            name: 'pawn', 
-            color: 'white',
-        },
-        {
-            name: 'pawn', 
-            color: 'white',
-        },
-        {
-            name: 'pawn', 
-            color: 'white',
-        },
-        {
-            name: 'pawn', 
-            color: 'white',
-        },
-        {
-            name: 'pawn', 
-            color: 'white',
-        },
-        {
-            name: 'pawn', 
-            color: 'white',
-        },
-        {
-            name: 'pawn', 
-            color: 'white',
-        },
-    ],
-    [null, null, null, null, null, null, null, null], 
-    [null, null, null, null, null, null, null, null],
-    [null, null, null, null, null, null, null, null], 
-    [null, null, null, null, null, null, null, null],
-    [
-        {
-            name: 'pawn', 
-            color: 'black',
-        },
-        {
-            name: 'pawn', 
-            color: 'black',
-        },
-        {
-            name: 'pawn', 
-            color: 'black',
-        },
-        {
-            name: 'pawn', 
-            color: 'black',
-        },
-        {
-            name: 'pawn', 
-            color: 'black',
-        },
-        {
-            name: 'pawn', 
-            color: 'black',
-        },
-        {
-            name: 'pawn', 
-            color: 'black',
-        },
-        {
-            name: 'pawn', 
-            color: 'black',
-        },
-    ],  
-   [
-        {
-            name: 'rook', 
-            color: 'black',
-        }, 
-        {
-            name: 'knight',
-            color: 'black',
-        },
-        {
-            name: 'bishop',
-            color: 'black',
-        },
-        {
-            name: 'queen', 
-            color: 'black',
-        }, {
-            name: 'king',
-            color: 'black',
-        },
-        {
-            name: 'bishop',
-            color: 'black',
-        },
-        {
-            name: 'knight',
-            color: 'black',
-        },
-        {
-            name: 'rook', 
-            color: 'black',
-        }
-    ], 
-    
-]
+    }
+    return board;
+}
