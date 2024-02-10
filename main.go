@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -13,7 +12,6 @@ import (
 	"github.com/sina-am/chess/services/game"
 	"github.com/sina-am/chess/services/users"
 	"github.com/sina-am/chess/storage"
-	"github.com/sina-am/chess/types"
 )
 
 type App interface {
@@ -70,8 +68,6 @@ func main() {
 	}
 
 	storage := storage.NewMemoryStorage()
-	storage.InsertUser(context.Background(), types.NewUser("sinaaarabi2@gmail.com", "sina", "sina.a.m"))
-	storage.InsertUser(context.Background(), types.NewUser("sinaaarabi1@gmail.com", "ali", "sina.a.m"))
 
 	gameApp, err := game.NewApp(cfg, storage)
 	if err != nil {
