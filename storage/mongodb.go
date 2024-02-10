@@ -113,33 +113,20 @@ func (db *mongoStorage) GetUserByEmail(ctx context.Context, email string) (*type
 	)
 }
 
-// func (db *mongoStorage) InsertGame(ctx context.Context, game *Game) error {
-// 	collection := db.getUserCollection()
-// 	game.Id = primitive.NewObjectID()
-// 	_, err := collection.UpdateMany(
-// 		ctx,
-// 		bson.M{"$or": bson.A{bson.M{"_id": game.Players[0].UserId}, bson.M{"_id": game.Players[1].UserId}}},
-// 		bson.M{"$push": bson.M{"games": game}},
-// 	)
-// 	return err
-// }
+func (db *mongoStorage) InsertGame(ctx context.Context, game *types.Game) error {
+	if len(game.Players) != 2 {
+		return fmt.Errorf("invalid number of players")
+	}
+	collection := db.getUserCollection()
+	game.Id = primitive.NewObjectID()
+	_, err := collection.UpdateMany(
+		ctx,
+		bson.M{"$or": bson.A{bson.M{"_id": game.Players[0].UserId}, bson.M{"_id": game.Players[1].UserId}}},
+		bson.M{"$push": bson.M{"games": game}},
+	)
 
-// func (db *mongoStorage) GetUserGame(ctx context.Context, userId string, gameId string) (*Game, error) {
-// 	return nil, nil
-// }
-
-// func (db *mongoStorage) UpdateGame(ctx context.Context, game *Game) error {
-// 	collection := db.getUserCollection()
-// 	_, err := collection.UpdateMany(
-// 		ctx,
-// 		bson.M{"$or": bson.A{
-// 			bson.M{"_id": game.Players[0].UserId},
-// 			bson.M{"_id": game.Players[1].UserId}},
-// 			"games._id": game.Id},
-// 		bson.M{"$set": bson.M{"games.$": game}},
-// 	)
-// 	return err
-// }
+	return err
+}
 
 func (db *mongoStorage) AuthenticateUser(ctx context.Context, email string, plainPassword string) (*types.User, error) {
 	user, err := db.GetUserByEmail(ctx, email)

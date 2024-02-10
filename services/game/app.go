@@ -19,13 +19,14 @@ type app struct {
 func NewApp(cfg *config.Config, s storage.Storage) (*app, error) {
 	return &app{
 		apis: &APIService{
+			Storage: s,
 			WsUpgrader: websocket.Upgrader{
 				CheckOrigin:      func(r *http.Request) bool { return true },
 				HandshakeTimeout: time.Second * 3,
 				ReadBufferSize:   1024,
 				WriteBufferSize:  1024,
 			},
-			GameHandler:   NewGameHandler(NewMemoryWaitList()),
+			GameHandler:   NewGameHandler(NewMemoryWaitList(), s),
 			Authenticator: nil,
 			Renderer:      nil,
 		},

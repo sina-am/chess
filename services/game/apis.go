@@ -8,9 +8,11 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/sina-am/chess/auth"
 	"github.com/sina-am/chess/core"
+	"github.com/sina-am/chess/storage"
 )
 
 type APIService struct {
+	Storage       storage.Storage
 	WsUpgrader    websocket.Upgrader
 	GameHandler   GameHandler
 	Renderer      core.Renderer
@@ -41,8 +43,12 @@ func (s *APIService) StartGame(c echo.Context) error {
 	})
 }
 func (s *APIService) GetPlayers(c echo.Context) error {
-	playersOut := map[string]string{}
-	return c.JSON(http.StatusOK, playersOut)
+	users, err := s.Storage.GetAllUsers(c.Request().Context())
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, users)
 }
 
 func (s *APIService) Home(c echo.Context) error {

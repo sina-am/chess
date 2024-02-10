@@ -20,4 +20,5 @@ type Storage interface {
 	GetUserById(ctx context.Context, id primitive.ObjectID) (*types.User, error)
 	GetUserByEmail(ctx context.Context, email string) (*types.User, error)
 	AuthenticateUser(ctx context.Context, email string, plainPassword string) (*types.User, error)
+	InsertGame(ctx context.Context, game *types.Game) error
 }

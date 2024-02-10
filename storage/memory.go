@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/sina-am/chess/auth"
 	"github.com/sina-am/chess/types"
@@ -72,4 +73,21 @@ func (db *memoryStorage) AuthenticateUser(ctx context.Context, email string, pla
 		return nil, ErrAuthentication
 	}
 	return user, nil
+}
+
+func (db *memoryStorage) InsertGame(ctx context.Context, game *types.Game) error {
+	if len(game.Players) != 2 {
+		return fmt.Errorf("invalid number of players")
+	}
+	user1, err := db.GetUserById(ctx, game.Players[0].UserId)
+	if err != nil {
+		return err
+	}
+	user2, err := db.GetUserById(ctx, game.Players[1].UserId)
+	if err != nil {
+		return err
+	}
+	user1.Games = append(user1.Games, *game)
+	user2.Games = append(user2.Games, *game)
+	return nil
 }

@@ -7,6 +7,7 @@ import (
 
 	"github.com/sina-am/chess/auth"
 	"github.com/sina-am/chess/chess"
+	"github.com/sina-am/chess/storage"
 )
 
 type PlayerStatus int
@@ -108,20 +109,22 @@ type GameHandler interface {
 	UnRegister(Client)
 
 	Play(client Client, move chess.Move)
-	Exit(clien Client)
+	Exit(client Client)
 
 	AddToWaitList(p Client, gs GameSetting)
 	RemoveFromWaitList(p Client)
 }
 
 type gameHandler struct {
+	storage  storage.Storage
 	players  *onlinePlayerStorage
 	waitList WaitList
 	eventCh  chan EventMsg
 }
 
-func NewGameHandler(wl WaitList) GameHandler {
+func NewGameHandler(wl WaitList, s storage.Storage) GameHandler {
 	h := &gameHandler{
+		storage:  s,
 		players:  NewOnlinePlayerStorage(),
 		waitList: wl,
 		eventCh:  make(chan EventMsg),
@@ -273,7 +276,7 @@ func (h *gameHandler) handleWait(c Client, gs GameSetting) {
 	}
 
 	player2 := h.players.Get(c2)
-	NewOnlineGame(player, player2, gs.Duration)
+	NewOnlineGame(h.storage, player, player2, gs.Duration)
 }
 
 func (h *gameHandler) handleExit(c Client) {
@@ -287,10 +290,18 @@ func (h *gameHandler) handleExit(c Client) {
 		h.waitList.Remove(c)
 		player.status = StatusConnected
 	} else if player.status == StatusPlaying {
-		g := player.currentGame
-		g.Exit(player)
+		h.handleExitGame(player, c)
+		player.status = StatusConnected
 	}
 }
+
+func (h *gameHandler) handleExitGame(player *onlinePlayer, c Client) {
+	g := player.currentGame
+	if err := g.Exit(player); err != nil {
+		log.Print(err)
+	}
+}
+
 func (h *gameHandler) handleExitWaitList(c Client) {
 	if err := h.waitList.Remove(c); err != nil {
 		c.SendErr(err)

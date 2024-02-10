@@ -1,10 +1,14 @@
 package game
 
 import (
+	"context"
 	"fmt"
 	"time"
 
 	"github.com/sina-am/chess/chess"
+	"github.com/sina-am/chess/storage"
+	"github.com/sina-am/chess/types"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type ClientEventType string
@@ -16,12 +20,14 @@ const (
 )
 
 type OnlineGame struct {
+	Storage storage.Storage
 	Players map[chess.Color]*onlinePlayer
 	Game    chess.Chess
 }
 
-func NewOnlineGame(p1, p2 *onlinePlayer, duration time.Duration) *OnlineGame {
+func NewOnlineGame(s storage.Storage, p1, p2 *onlinePlayer, duration time.Duration) *OnlineGame {
 	game := &OnlineGame{
+		Storage: s,
 		Players: map[chess.Color]*onlinePlayer{
 			chess.White: p1,
 			chess.Black: p2,
@@ -103,16 +109,8 @@ func (g *OnlineGame) Play(p *onlinePlayer, move chess.Move) error {
 	}
 
 	if g.Game.IsFinished() {
-		color := g.GetWinner()
-
-		g.broadcastEndMsg(map[string]any{
-			"type": EndGameClientEvent,
-			"payload": map[string]any{
-				"winner": color.String(),
-				"score":  10,
-				"reason": "Won",
-			},
-		})
+		winner := g.GetWinner()
+		return g.endGame(winner, "won")
 	}
 	return nil
 }
@@ -127,22 +125,38 @@ func (g *OnlineGame) Exit(p *onlinePlayer) error {
 		return err
 	}
 
-	g.broadcastEndMsg(map[string]any{
-		"type": EndGameClientEvent,
-		"payload": map[string]any{
-			"winner": winner.String(),
-			"score":  10,
-			"reason": "abandoned",
-		},
-	})
-
-	return nil
+	return g.endGame(winner, "abandoned")
 }
 
-func (g *OnlineGame) broadcastEndMsg(msg map[string]any) {
+func (g *OnlineGame) endGame(winner chess.Color, reason string) error {
 	for _, p := range g.GetPlayers() {
-		p.client.Send(msg)
+		p.client.Send(map[string]any{
+			"type": EndGameClientEvent,
+			"payload": map[string]any{
+				"winner": winner.String(),
+				"score":  10,
+				"reason": reason,
+			},
+		})
 		p.currentGame = nil
 		p.status = StatusConnected
 	}
+
+	player1 := g.Players[chess.White]
+	player2 := g.Players[chess.Black]
+
+	if player1.user.IsAuthenticated() && player2.user.IsAuthenticated() {
+		game := types.Game{
+			Id: primitive.NewObjectID(),
+			Players: []types.Player{
+				{UserId: player1.user.GetId(), Color: chess.White.String()},
+				{UserId: player2.user.GetId(), Color: chess.Black.String()},
+			},
+			Winner: winner.String(),
+			Reason: reason,
+		}
+		ctx := context.Background()
+		return g.Storage.InsertGame(ctx, &game)
+	}
+	return nil
 }
