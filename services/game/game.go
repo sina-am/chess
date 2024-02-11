@@ -23,6 +23,8 @@ type OnlineGame struct {
 	Storage storage.Storage
 	Players map[chess.Color]*onlinePlayer
 	Game    chess.Chess
+
+	drawOffered *onlinePlayer
 }
 
 func NewOnlineGame(s storage.Storage, p1, p2 *onlinePlayer, duration time.Duration) *OnlineGame {
@@ -59,19 +61,6 @@ func NewOnlineGame(s storage.Storage, p1, p2 *onlinePlayer, duration time.Durati
 	return game
 }
 
-func (g *OnlineGame) GetWinner() chess.Color {
-	return g.Game.GetWinner()
-}
-
-func (g *OnlineGame) GetPlayers() []*onlinePlayer {
-	players := []*onlinePlayer{}
-	for color := range g.Players {
-		players = append(players, g.Players[color])
-	}
-
-	return players
-}
-
 func (g *OnlineGame) getPlayerColor(p *onlinePlayer) (chess.Color, error) {
 	for color := range g.Players {
 		if g.Players[color] == p {
@@ -96,7 +85,7 @@ func (g *OnlineGame) Play(p *onlinePlayer, move chess.Move) error {
 		"message": fmt.Sprintf("you played %d", move),
 	})
 
-	for _, pl := range g.GetPlayers() {
+	for _, pl := range g.Players {
 		if p != pl {
 			pl.client.Send(map[string]any{
 				"type": PlayedClientEvent,
@@ -109,10 +98,38 @@ func (g *OnlineGame) Play(p *onlinePlayer, move chess.Move) error {
 	}
 
 	if g.Game.IsFinished() {
-		winner := g.GetWinner()
+		winner := g.Game.GetWinner()
 		return g.endGame(winner, "won")
 	}
 	return nil
+}
+
+func (g *OnlineGame) OfferDraw(p *onlinePlayer) {
+	g.drawOffered = p
+	opponent, _ := g.GetOpponentPlayer(p)
+	opponent.client.Send(map[string]string{
+		"type": "drawOffered",
+	})
+}
+
+func (g *OnlineGame) RespondDraw(p *onlinePlayer, accepted bool) {
+	opponent, _ := g.GetOpponentPlayer(p)
+	if g.drawOffered != opponent {
+		return
+	}
+
+	g.drawOffered = nil
+	if !accepted {
+		opponent.client.Send(map[string]any{
+			"type": "respondDraw",
+			"payload": map[string]string{
+				"result": "rejected",
+			},
+		})
+		return
+	}
+	g.Game.Exit()
+	g.endGame(chess.Empty, "draw")
 }
 
 func (g *OnlineGame) Exit(p *onlinePlayer) error {
@@ -120,16 +137,13 @@ func (g *OnlineGame) Exit(p *onlinePlayer) error {
 	if err != nil {
 		return err
 	}
-	winner, err := g.Game.Exit(color)
-	if err != nil {
-		return err
-	}
+	g.Game.Exit()
 
-	return g.endGame(winner, "abandoned")
+	return g.endGame(color.OppositeColor(), "abandoned")
 }
 
 func (g *OnlineGame) endGame(winner chess.Color, reason string) error {
-	for _, p := range g.GetPlayers() {
+	for _, p := range g.Players {
 		p.client.Send(map[string]any{
 			"type": EndGameClientEvent,
 			"payload": map[string]any{
@@ -159,4 +173,12 @@ func (g *OnlineGame) endGame(winner chess.Color, reason string) error {
 		return g.Storage.InsertGame(ctx, &game)
 	}
 	return nil
+}
+
+func (g *OnlineGame) GetOpponentPlayer(p *onlinePlayer) (*onlinePlayer, error) {
+	color, err := g.getPlayerColor(p)
+	if err != nil {
+		return nil, err
+	}
+	return g.Players[color.OppositeColor()], nil
 }

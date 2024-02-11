@@ -56,6 +56,13 @@ class ChessUI {
         this.opponentElem.innerText = opponent.name + " " + opponent.color;
     }
 
+    openOfferedDrawBox(handler) {
+        if (confirm("Opponent offered a draw")) {
+            handler("accepted");
+        } else {
+            handler("rejected");
+        }
+    }
     render() {
         this.ctx.reset()
         for (let x = 0; x < 8; x++) {

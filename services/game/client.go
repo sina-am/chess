@@ -50,9 +50,11 @@ func NewWSClient(conn *websocket.Conn, gamHandler GameHandler, user auth.User) *
 		close:       make(chan error),
 	}
 	client.msgHandler = map[string]func(message) error{
-		"start": client.handleStart,
-		"play":  client.handlePlay,
-		"exit":  client.handleExit,
+		"start":       client.handleStart,
+		"play":        client.handlePlay,
+		"exit":        client.handleExit,
+		"offerDraw":   client.handleOfferDraw,
+		"respondDraw": client.handleRespondDraw,
 	}
 	return client
 }
@@ -179,5 +181,28 @@ func (p *WSClient) handlePlay(msg message) error {
 
 func (p *WSClient) handleExit(msg message) error {
 	p.gameHandler.Exit(p)
+	return nil
+}
+
+func (p *WSClient) handleOfferDraw(msg message) error {
+	p.gameHandler.OfferDraw(p)
+	return nil
+}
+
+type respondDrawMessage struct {
+	Result string
+}
+
+func (p *WSClient) handleRespondDraw(msg message) error {
+	payload := respondDrawMessage{}
+	if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+		return err
+	}
+	if payload.Result == "accepted" {
+		p.gameHandler.RespondDraw(p, true)
+	} else {
+		p.gameHandler.RespondDraw(p, false)
+	}
+
 	return nil
 }

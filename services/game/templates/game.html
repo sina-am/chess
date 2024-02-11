@@ -25,6 +25,7 @@
         <div id="gameWinner"></div>
         <p style="color: red;" id="gameStatus">No winner</p>
         <button id="exitBtn" class="btn btn-danger">Resign</button>
+        <button id="offerDrawBtn" class="btn btn-secondary">Offer Draw</button>
     </div>
 </div>
 
@@ -96,6 +97,9 @@
             document.getElementById("exitBtn").onclick = (event) => {
                 chess.exit();
                 delete chess;
+            };
+            document.getElementById("offerDrawBtn").onclick = (event) => {
+                chess.offerDraw();
             };
         } else {
             const chess = new OfflineChess(ui, playerName, board);

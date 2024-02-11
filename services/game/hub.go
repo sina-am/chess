@@ -65,6 +65,8 @@ const (
 	JoinWaitListEvent
 	LeaveWaitListEvent
 	ExitEvent
+	OfferDrawEvent
+	RespondDrawEvent
 )
 
 type EventMsg struct {
@@ -93,12 +95,17 @@ type LeaveWaitListEventMsg struct {
 type ExitEventMsg struct {
 	Player Client
 }
-
+type OfferDrawEventMsg struct {
+	Player Client
+}
 type PlayEventMsg struct {
 	Player Client
 	Move   chess.Move
 }
-
+type RespondDrawEventMsg struct {
+	Player   Client
+	Accepted bool
+}
 type GameSetting struct {
 	Duration time.Duration
 }
@@ -110,6 +117,8 @@ type GameHandler interface {
 
 	Play(client Client, move chess.Move)
 	Exit(client Client)
+	OfferDraw(client Client)
+	RespondDraw(client Client, accepted bool)
 
 	AddToWaitList(p Client, gs GameSetting)
 	RemoveFromWaitList(p Client)
@@ -169,6 +178,27 @@ func (h *gameHandler) Exit(p Client) {
 	h.eventCh <- msg
 }
 
+func (h *gameHandler) OfferDraw(client Client) {
+	msg := EventMsg{
+		Type: OfferDrawEvent,
+		Body: OfferDrawEventMsg{
+			Player: client,
+		},
+	}
+	h.eventCh <- msg
+}
+
+func (h *gameHandler) RespondDraw(client Client, accepted bool) {
+	msg := EventMsg{
+		Type: RespondDrawEvent,
+		Body: RespondDrawEventMsg{
+			Player:   client,
+			Accepted: accepted,
+		},
+	}
+	h.eventCh <- msg
+}
+
 func (h *gameHandler) AddToWaitList(p Client, gs GameSetting) {
 	msg := EventMsg{
 		Type: JoinWaitListEvent,
@@ -212,6 +242,12 @@ func (h *gameHandler) Start() {
 		case ExitEvent:
 			body := event.Body.(ExitEventMsg)
 			h.handleExit(body.Player)
+		case OfferDrawEvent:
+			body := event.Body.(OfferDrawEventMsg)
+			h.handleOfferDraw(body.Player)
+		case RespondDrawEvent:
+			body := event.Body.(RespondDrawEventMsg)
+			h.handleRespondDraw(body.Player, body.Accepted)
 		}
 	}
 }
@@ -293,6 +329,35 @@ func (h *gameHandler) handleExit(c Client) {
 		h.handleExitGame(player, c)
 		player.status = StatusConnected
 	}
+}
+func (h *gameHandler) handleOfferDraw(c Client) {
+	player := h.players.Get(c)
+	if player == nil {
+		log.Printf("player with client %v is not in the players list", c)
+		return
+	}
+
+	if player.status != StatusPlaying {
+		player.client.SendErr(fmt.Errorf("you're not in any game"))
+		return
+	}
+
+	player.currentGame.OfferDraw(player)
+}
+
+func (h *gameHandler) handleRespondDraw(c Client, accepted bool) {
+	player := h.players.Get(c)
+	if player == nil {
+		log.Printf("player with client %v is not in the players list", c)
+		return
+	}
+
+	if player.status != StatusPlaying {
+		player.client.SendErr(fmt.Errorf("you're not in any game"))
+		return
+	}
+
+	player.currentGame.RespondDraw(player, accepted)
 }
 
 func (h *gameHandler) handleExitGame(player *onlinePlayer, c Client) {

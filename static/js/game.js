@@ -121,8 +121,10 @@ class OnlineChess {
                 this.winner = msg.winner;
                 if (msg.payload.winner === this.player.color) {
                     document.getElementById('gameWinner').innerText = "You won!";
-                } else {
+                } else if(msg.payload.winner === this.opponent.color){
                     document.getElementById('gameWinner').innerText = "You lost";
+                } else {
+                    document.getElementById('gameWinner').innerText = "Draw";
                 }
                 this.status = "finished";
                 this.server.send({
@@ -130,6 +132,24 @@ class OnlineChess {
                     "payload": ""
                 });
                 break;
+            case "drawOffered":
+                this.ui.openOfferedDrawBox((result) => {
+                    if(result === "accepted") {
+                        this.server.send({
+                            "type": "respondDraw",
+                            "payload": {
+                                "result": "accepted"
+                            }
+                        })
+                    } else {
+                        this.server.send({
+                            "type": "respondDraw",
+                            "payload": {
+                                "result": "rejected"
+                            },
+                        })
+                    }
+                })
             default:
                 break;
         }
@@ -156,6 +176,12 @@ class OnlineChess {
         this.server.send({
             "type": "exit",
             "payload": ""
+        });
+    }
+    offerDraw() {
+        this.server.send({
+            "type": "offerDraw",
+            "payload": {}
         });
     }
 }

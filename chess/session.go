@@ -16,7 +16,6 @@ type chessSession struct {
 }
 
 func NewSession(duration time.Duration) *chessSession {
-
 	engine := NewEngine()
 	whiteTimer := time.NewTicker(10 * time.Minute)
 
@@ -49,9 +48,6 @@ func (g *chessSession) timeoutTicker(ticker *time.Ticker, playerColor Color) {
 }
 
 func (g *chessSession) GetWinner() Color {
-	if g.winner != Empty {
-		return g.winner
-	}
 	return g.engine.GetWinner()
 }
 
@@ -60,6 +56,10 @@ func (g *chessSession) IsFinished() bool {
 }
 
 func (g *chessSession) Play(playerColor Color, m Move) error {
+	if g.finished {
+		return ErrGameEnd
+	}
+
 	err := g.engine.Play(playerColor, m)
 	if err != nil {
 		return err
@@ -77,16 +77,14 @@ func (g *chessSession) Play(playerColor Color, m Move) error {
 		go g.timeoutTicker(g.tickers[playerColor.OppositeColor()], playerColor.OppositeColor())
 	}
 
-	fmt.Printf("White time: %s\n", g.remainingTimes[White])
-	fmt.Printf("Black time: %s\n", g.remainingTimes[Black])
 	return nil
 }
 
-func (g *chessSession) Exit(playerColor Color) (Color, error) {
+func (g *chessSession) Exit() {
 	for _, ticker := range g.tickers {
 		if ticker != nil {
 			ticker.Stop()
 		}
 	}
-	return playerColor.OppositeColor(), nil
+	g.finished = true
 }

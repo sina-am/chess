@@ -36,10 +36,15 @@ const (
 type Color int
 
 func (c Color) String() string {
-	if c == White {
+	switch c {
+	case White:
 		return "white"
-	} else {
+	case Black:
 		return "black"
+	case Empty:
+		return "empty"
+	default:
+		panic("invalid color")
 	}
 }
 
