@@ -1,4 +1,6 @@
 .vscode/
 static/bootstrap/
 bin/
+*.wasm
+wasm_exec.js
 go.sum

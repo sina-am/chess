@@ -27,6 +27,15 @@ type OnlineGame struct {
 	drawOffered *onlinePlayer
 }
 
+type StartGamePayloadWSMsg struct {
+	Opponent string `json:"opponent"`
+	Tile     string `json:"tile"`
+}
+type StartGameWSMsg struct {
+	Type    ClientEventType       `json:"type"`
+	Payload StartGamePayloadWSMsg `json:"payload"`
+}
+
 func NewOnlineGame(s storage.Storage, p1, p2 *onlinePlayer, duration time.Duration) *OnlineGame {
 	game := &OnlineGame{
 		Storage: s,
@@ -43,18 +52,18 @@ func NewOnlineGame(s storage.Storage, p1, p2 *onlinePlayer, duration time.Durati
 	p2.currentGame = game
 	p2.status = StatusPlaying
 
-	p1.client.Send(map[string]any{
-		"type": StartedClientEvent,
-		"payload": map[string]any{
-			"opponent": p2.user.GetName(),
-			"tile":     chess.White.String(),
+	p1.client.Send(StartGameWSMsg{
+		Type: StartedClientEvent,
+		Payload: StartGamePayloadWSMsg{
+			Opponent: p2.user.GetName(),
+			Tile:     chess.White.String(),
 		},
 	})
-	p2.client.Send(map[string]any{
-		"type": StartedClientEvent,
-		"payload": map[string]any{
-			"opponent": p1.user.GetName(),
-			"tile":     chess.Black.String(),
+	p2.client.Send(StartGameWSMsg{
+		Type: StartedClientEvent,
+		Payload: StartGamePayloadWSMsg{
+			Opponent: p1.user.GetName(),
+			Tile:     chess.Black.String(),
 		},
 	})
 
@@ -97,9 +106,8 @@ func (g *OnlineGame) Play(p *onlinePlayer, move chess.Move) error {
 		}
 	}
 
-	if g.Game.IsFinished() {
-		winner := g.Game.GetWinner()
-		return g.endGame(winner, "won")
+	if result := g.Game.GetResult(); result != chess.NoResult {
+		return g.endGame(result)
 	}
 	return nil
 }
@@ -129,7 +137,7 @@ func (g *OnlineGame) RespondDraw(p *onlinePlayer, accepted bool) {
 		return
 	}
 	g.Game.Exit()
-	g.endGame(chess.Empty, "draw")
+	g.endGame(chess.Result{Reason: chess.Draw, WinnerColor: chess.Empty})
 }
 
 func (g *OnlineGame) Exit(p *onlinePlayer) error {
@@ -139,17 +147,20 @@ func (g *OnlineGame) Exit(p *onlinePlayer) error {
 	}
 	g.Game.Exit()
 
-	return g.endGame(color.OppositeColor(), "abandoned")
+	return g.endGame(chess.Result{
+		WinnerColor: color.OppositeColor(),
+		Reason:      chess.Abandoned,
+	})
 }
 
-func (g *OnlineGame) endGame(winner chess.Color, reason string) error {
+func (g *OnlineGame) endGame(result chess.Result) error {
 	for _, p := range g.Players {
 		p.client.Send(map[string]any{
 			"type": EndGameClientEvent,
 			"payload": map[string]any{
-				"winner": winner.String(),
+				"winner": result.WinnerColor.String(),
 				"score":  10,
-				"reason": reason,
+				"reason": string(result.Reason),
 			},
 		})
 		p.currentGame = nil
@@ -166,8 +177,8 @@ func (g *OnlineGame) endGame(winner chess.Color, reason string) error {
 				{UserId: player1.user.GetId(), Color: chess.White.String()},
 				{UserId: player2.user.GetId(), Color: chess.Black.String()},
 			},
-			Winner: winner.String(),
-			Reason: reason,
+			Winner: result.WinnerColor.String(),
+			Reason: string(result.Reason),
 		}
 		ctx := context.Background()
 		return g.Storage.InsertGame(ctx, &game)
