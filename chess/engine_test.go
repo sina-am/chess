@@ -1,11 +1,116 @@
 package chess
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
+func TestPawnMoves(t *testing.T) {
+	pieces := []*Piece{
+		{
+			Type:     King,
+			Color:    Black,
+			Location: Location{Row: 7, Col: 7},
+		},
+		{
+			Type:     Pawn,
+			Color:    Black,
+			Location: Location{Row: 6, Col: 6},
+		},
+		{
+			Type:     King,
+			Color:    White,
+			Location: Location{Row: 0, Col: 0},
+		},
+		{
+			Type:     Pawn,
+			Color:    White,
+			Location: Location{Row: 1, Col: 1},
+		},
+	}
+	game := NewFromPieces(pieces)
+	game.Print()
+	possibleMoves := game.possibleMoves[pieces[3]]
+
+	for _, move := range possibleMoves {
+		fmt.Printf("%d, %d\n", move.Row, move.Col)
+	}
+}
+func TestBishopMoves(t *testing.T) {
+	pieces := []*Piece{
+		{
+			Type:     King,
+			Color:    Black,
+			Location: Location{Row: 7, Col: 7},
+		},
+		{
+			Type:     Queen,
+			Color:    Black,
+			Location: Location{Row: 6, Col: 6},
+		},
+		{
+			Type:     King,
+			Color:    White,
+			Location: Location{Row: 0, Col: 0},
+		},
+		{
+			Type:     Bishop,
+			Color:    White,
+			Location: Location{Row: 4, Col: 4},
+		},
+	}
+	game := NewFromPieces(pieces)
+	game.Print()
+	possibleMoves := game.possibleMoves[pieces[3]]
+
+	for _, move := range possibleMoves {
+		fmt.Printf("%d, %d\n", move.Row, move.Col)
+	}
+}
+
+func TestKingMoves(t *testing.T) {
+	pieces := []*Piece{
+		{
+			Type:     King,
+			Color:    Black,
+			Location: Location{Row: 7, Col: 5},
+		},
+		{
+			Type:     King,
+			Color:    White,
+			Location: Location{Row: 0, Col: 0},
+		},
+	}
+	game := NewFromPieces(pieces)
+	err := game.Play(White, Move{From: Location{Row: 0, Col: 0}, To: Location{Row: 1, Col: 1}})
+	assert.Nil(t, err)
+}
+func TestKingProblemMoves(t *testing.T) {
+	pieces := []*Piece{
+		{
+			Type:     King,
+			Color:    Black,
+			Location: Location{Row: 7, Col: 5},
+		},
+		{
+			Type:     King,
+			Color:    White,
+			Location: Location{Row: 0, Col: 0},
+		},
+		{
+			Type:     Queen,
+			Color:    Black,
+			Location: Location{Row: 1, Col: 6},
+		},
+	}
+	game := NewFromPieces(pieces)
+	err := game.Play(White, Move{From: Location{Row: 0, Col: 0}, To: Location{Row: 1, Col: 1}})
+	assert.NotNil(t, err)
+	err = game.Play(White, Move{From: Location{Row: 0, Col: 0}, To: Location{Row: 1, Col: 0}})
+	assert.NotNil(t, err)
+}
 func TestPromotion(t *testing.T) {
 	pieces := []*Piece{
 		{
@@ -202,7 +307,7 @@ func TestPinnedPiece(t *testing.T) {
 				To:   Location{Row: 1, Col: 1},
 			},
 		),
-		ErrChecked,
+		ErrInvalidPieceMove,
 	)
 }
 
@@ -237,7 +342,7 @@ func TestKingMoveWhenIsChecked(t *testing.T) {
 					To:   Location{Row: 1, Col: 0},
 				},
 			),
-			ErrChecked,
+			ErrInvalidPieceMove,
 		)
 	})
 	t.Run("move to a safe squire", func(t *testing.T) {
@@ -279,7 +384,7 @@ func TestKingCollisions(t *testing.T) {
 					To:   Location{Row: 3, Col: 2},
 				},
 			),
-			ErrChecked,
+			ErrInvalidPieceMove,
 		)
 	})
 }
@@ -313,10 +418,36 @@ func TestKingCheckmate(t *testing.T) {
 				To:   Location{Row: 1, Col: 1},
 			},
 		)
-		assert.Equal(t, game.GetWinner(), White)
+		assert.Equal(t, game.GetResult().WinnerColor, White)
 	})
 }
 
+func TestKingCapture(t *testing.T) {
+	pieces := []*Piece{
+		{
+			Type:     King,
+			Color:    White,
+			Location: Location{Row: 7, Col: 7},
+		},
+		{
+			Type:     King,
+			Color:    Black,
+			Location: Location{Row: 0, Col: 0},
+		},
+		{
+			Type:     Queen,
+			Color:    White,
+			Location: Location{Row: 1, Col: 1},
+		},
+	}
+	game := NewFromPieces(pieces)
+	game.SwitchTurn()
+
+	err := game.Play(Black, Move{From: Location{Row: 0, Col: 0}, To: Location{Row: 1, Col: 1}})
+	assert.Nil(t, err)
+	game.Print()
+
+}
 func TestWhiteRightCastling(t *testing.T) {
 	pieces := []*Piece{
 		{
@@ -430,7 +561,7 @@ func TestBlackLeftCastling(t *testing.T) {
 		},
 	}
 	game := NewFromPieces(pieces)
-	game.turn = Black
+	game.switchTurn()
 	assert.Nil(t, game.Play(Black, Move{From: Location{Row: 7, Col: 4}, To: Location{Row: 7, Col: 2}}))
 
 	assert.Equal(t, game.board[7][2], pieces[1])
@@ -502,4 +633,43 @@ func TestRightCastlingRollback(t *testing.T) {
 	assert.Equal(t, game.board[7][4], pieces[1])
 	assert.Equal(t, game.board[7][7], pieces[3])
 	game.Print()
+}
+func TestStaleMate(t *testing.T) {
+	pieces := []*Piece{
+		{
+			Type:     King,
+			Color:    White,
+			Location: Location{Row: 0, Col: 0},
+		},
+		{
+			Type:     King,
+			Color:    Black,
+			Location: Location{Row: 2, Col: 2},
+		},
+		{
+			Type:     Rook,
+			Color:    Black,
+			Location: Location{Row: 7, Col: 1},
+		},
+		{
+			Type:     Rook,
+			Color:    Black,
+			Location: Location{Row: 2, Col: 7},
+		},
+	}
+	game := NewFromPieces(pieces)
+	game.turn = Black
+
+	game.Play(Black, Move{
+		From: Location{
+			Row: 2,
+			Col: 7,
+		},
+		To: Location{
+			Row: 1,
+			Col: 7,
+		},
+	})
+
+	assert.Equal(t, Stalemate, game.GetResult().Reason)
 }

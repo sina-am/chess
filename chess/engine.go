@@ -5,27 +5,48 @@ import (
 	"math"
 )
 
+type Reason string
+
+const (
+	Checkmate Reason = "checkmate"
+	Stalemate Reason = "stalemate"
+	Timeout   Reason = "timeout"
+	Abandoned Reason = "abandoned"
+	Resign    Reason = "resign"
+	Draw      Reason = "draw"
+)
+
+type Result struct {
+	Reason      Reason
+	WinnerColor Color
+}
+
+var NoResult = Result{}
+
 type castling struct {
 	left  bool
 	right bool
 }
 
-type chessEngine struct {
+type ChessEngine struct {
 	board        [8][8]*Piece
 	kings        map[Color]*Piece
 	pieces       map[Color][]*Piece
 	castleRights map[Color]castling
 	turn         Color
-	finished     bool
-	winner       Color
+
+	possibleMoves map[*Piece][]Location
+	finished      bool
+	result        Result
 }
 
-func NewEngine() *chessEngine {
-	engine := &chessEngine{
-		board:  newStandardBoard(),
-		kings:  make(map[Color]*Piece, 2),
-		pieces: map[Color][]*Piece{White: {}, Black: {}},
-		turn:   White,
+func NewEngine() *ChessEngine {
+	engine := &ChessEngine{
+		board:         newStandardBoard(),
+		kings:         make(map[Color]*Piece, 2),
+		pieces:        map[Color][]*Piece{White: {}, Black: {}},
+		turn:          White,
+		possibleMoves: map[*Piece][]Location{},
 		castleRights: map[Color]castling{
 			White: {
 				left:  true,
@@ -36,6 +57,7 @@ func NewEngine() *chessEngine {
 				right: true,
 			},
 		},
+		result: NoResult,
 	}
 	engine.kings = map[Color]*Piece{
 		White: engine.board[0][4],
@@ -46,14 +68,21 @@ func NewEngine() *chessEngine {
 	engine.pieces[Black] = append(engine.pieces[Black], engine.board[7][:]...)
 	engine.pieces[Black] = append(engine.pieces[Black], engine.board[6][:]...)
 
+	engine.generatePossibleMoves()
 	return engine
 }
-func NewFromPieces(pieces []*Piece) *chessEngine {
-	engine := &chessEngine{
-		board:  newBoardFromPieces(pieces),
-		kings:  map[Color]*Piece{White: nil, Black: nil},
-		pieces: map[Color][]*Piece{White: {}, Black: {}},
-		turn:   White,
+
+func (g *ChessEngine) GetBoard() [8][8]*Piece {
+	return g.board
+}
+
+func NewFromPieces(pieces []*Piece) *ChessEngine {
+	engine := &ChessEngine{
+		board:         newBoardFromPieces(pieces),
+		kings:         map[Color]*Piece{White: nil, Black: nil},
+		pieces:        map[Color][]*Piece{White: {}, Black: {}},
+		turn:          White,
+		possibleMoves: map[*Piece][]Location{},
 		castleRights: map[Color]castling{
 			White: {
 				left:  true,
@@ -72,14 +101,251 @@ func NewFromPieces(pieces []*Piece) *chessEngine {
 		}
 		engine.pieces[piece.Color] = append(engine.pieces[piece.Color], piece)
 	}
+
+	engine.generatePossibleMoves()
 	return engine
 }
 
-func (g *chessEngine) IsFinished() bool {
-	return g.finished
+func (g *ChessEngine) GetResult() Result {
+	if g.finished {
+		return g.result
+	}
+	return NoResult
+}
+func (g *ChessEngine) generatePossibleMoves() {
+	pieces := g.pieces[g.turn]
+
+	for i := range pieces {
+		if pieces[i].Captured {
+			continue
+		}
+		switch pieces[i].Type {
+		case King:
+			g.possibleMoves[pieces[i]] = g.generateKingPossibleMoves(pieces[i])
+		case Pawn:
+			g.possibleMoves[pieces[i]] = g.generatePawnPossibleMoves(pieces[i])
+		case Bishop:
+			g.possibleMoves[pieces[i]] = g.generateBishopPossibleMoves(pieces[i])
+		case Rook:
+			g.possibleMoves[pieces[i]] = g.generateRookPossibleMoves(pieces[i])
+		case Knight:
+			g.possibleMoves[pieces[i]] = g.generateKnightPossibleMoves(pieces[i])
+		case Queen:
+			g.possibleMoves[pieces[i]] = append(g.generateBishopPossibleMoves(pieces[i]), g.generateRookPossibleMoves(pieces[i])...)
+		}
+	}
+}
+func (g *ChessEngine) occupiable(piece *Piece, loc Location) bool {
+	if err := loc.Validate(); err != nil {
+		return false
+	}
+	if (g.board[loc.Row][loc.Col] != nil) && (g.board[loc.Row][loc.Col].Color == piece.Color) {
+		return false
+	}
+
+	rb := NewRollBack(g)
+	rb.Do(Move{From: piece.Location, To: loc})
+	isChecked := g.isChecked(piece.Color)
+	rb.RollBack()
+
+	return !isChecked
 }
 
-func (g *chessEngine) Play(playerColor Color, move Move) error {
+func (g *ChessEngine) generateRookPossibleMoves(piece *Piece) []Location {
+	possibleMoves := []Location{}
+	i := 0
+	j := 0
+
+	for i = piece.Location.Row + 1; i < 8; i++ {
+		if g.occupiable(piece, Location{Row: i, Col: piece.Location.Col}) {
+			possibleMoves = append(possibleMoves, Location{Row: i, Col: piece.Location.Col})
+		}
+	}
+	for i = piece.Location.Row - 1; i >= 0; i-- {
+		if g.occupiable(piece, Location{Row: i, Col: piece.Location.Col}) {
+			possibleMoves = append(possibleMoves, Location{Row: i, Col: piece.Location.Col})
+		}
+	}
+	for j = piece.Location.Col + 1; j < 8; j++ {
+		if g.occupiable(piece, Location{Row: piece.Location.Row, Col: j}) {
+			possibleMoves = append(possibleMoves, Location{Row: piece.Location.Row, Col: j})
+		}
+	}
+	for j = piece.Location.Col - 1; j >= 0; j-- {
+		if g.occupiable(piece, Location{Row: piece.Location.Row, Col: j}) {
+			possibleMoves = append(possibleMoves, Location{Row: piece.Location.Row, Col: j})
+		}
+	}
+	return possibleMoves
+}
+
+func (g *ChessEngine) generatePawnPossibleMoves(piece *Piece) []Location {
+	possibleMoves := []Location{}
+
+	if piece.Color == White {
+		if g.board[piece.Location.Row+1][piece.Location.Col] == nil {
+			possibleMoves = append(possibleMoves, Location{Row: piece.Location.Row + 1, Col: piece.Location.Col})
+			// First move
+			if piece.Location.Row == 1 && g.board[piece.Location.Row+2][piece.Location.Col] == nil {
+				possibleMoves = append(possibleMoves, Location{Row: piece.Location.Row + 2, Col: piece.Location.Col})
+			}
+		}
+
+		destinations := []Location{
+			{Row: piece.Location.Row + 1, Col: piece.Location.Col + 1},
+			{Row: piece.Location.Row + 1, Col: piece.Location.Col - 1},
+		}
+		for _, destination := range destinations {
+			if err := destination.Validate(); err != nil {
+				continue
+			}
+			if (g.board[destination.Row][destination.Col] != nil) && (g.board[destination.Row][destination.Col].Color != piece.Color) {
+				possibleMoves = append(possibleMoves, destination)
+			}
+		}
+	} else {
+		if g.board[piece.Location.Row-1][piece.Location.Col] == nil {
+			possibleMoves = append(possibleMoves, Location{Row: piece.Location.Row - 1, Col: piece.Location.Col})
+			// First move
+			if piece.Location.Row == 6 && g.board[piece.Location.Row-2][piece.Location.Col] == nil {
+				possibleMoves = append(possibleMoves, Location{Row: piece.Location.Row - 2, Col: piece.Location.Col})
+			}
+		}
+		destinations := []Location{
+			{Row: piece.Location.Row - 1, Col: piece.Location.Col + 1},
+			{Row: piece.Location.Row - 1, Col: piece.Location.Col - 1},
+		}
+		for _, destination := range destinations {
+			if err := destination.Validate(); err != nil {
+				continue
+			}
+			if (g.board[destination.Row][destination.Col] != nil) && (g.board[destination.Row][destination.Col].Color != piece.Color) {
+				possibleMoves = append(possibleMoves, destination)
+			}
+		}
+	}
+
+	finalPossibleMoves := []Location{}
+	for _, location := range possibleMoves {
+		if g.occupiable(piece, location) {
+			finalPossibleMoves = append(finalPossibleMoves, location)
+		}
+	}
+	return finalPossibleMoves
+}
+
+func (g *ChessEngine) generateBishopPossibleMoves(piece *Piece) []Location {
+	possibleMoves := []Location{}
+
+	j := piece.Location.Col + 1
+	// Down-right
+	for i := piece.Location.Row + 1; i < 8; i++ {
+		if g.occupiable(piece, Location{Row: i, Col: j}) {
+			possibleMoves = append(possibleMoves, Location{Row: i, Col: j})
+			j += 1
+		}
+	}
+	j = piece.Location.Col - 1
+	for i := piece.Location.Row + 1; i < 8; i++ {
+		// Down-left
+		if g.occupiable(piece, Location{Row: i, Col: j}) {
+			possibleMoves = append(possibleMoves, Location{Row: i, Col: j})
+			j -= 1
+		}
+	}
+	j = piece.Location.Col + 1
+	for i := piece.Location.Row - 1; i >= 0; i-- {
+		// Up-right
+		if g.occupiable(piece, Location{Row: i, Col: j}) {
+			possibleMoves = append(possibleMoves, Location{Row: i, Col: j})
+			j += 1
+		}
+	}
+	j = piece.Location.Col - 1
+	for i := piece.Location.Row - 1; i >= 0; i-- {
+		// Up-left
+		if g.occupiable(piece, Location{Row: i, Col: j}) {
+			possibleMoves = append(possibleMoves, Location{Row: i, Col: j})
+			j -= 1
+		}
+	}
+	return possibleMoves
+}
+
+func (g *ChessEngine) generateKingPossibleMoves(king *Piece) []Location {
+	locations := []Location{
+		{king.Location.Row, king.Location.Col - 1},
+		{king.Location.Row, king.Location.Col + 1},
+		{king.Location.Row + 1, king.Location.Col},
+		{king.Location.Row - 1, king.Location.Col},
+		{king.Location.Row + 1, king.Location.Col + 1},
+		{king.Location.Row + 1, king.Location.Col - 1},
+		{king.Location.Row - 1, king.Location.Col + 1},
+		{king.Location.Row - 1, king.Location.Col - 1},
+	}
+	possibleMoves := []Location{}
+	for _, location := range locations {
+		if !g.occupiable(king, location) {
+			continue
+		}
+		possibleMoves = append(possibleMoves, location)
+	}
+
+	if g.castleRights[king.Color].left {
+		if (g.board[king.Location.Row][3] == nil) && (g.board[king.Location.Row][2] == nil) && (g.board[king.Location.Row][1] == nil) {
+			possibleMoves = append(possibleMoves, Location{Row: king.Location.Row, Col: king.Location.Col - 2})
+		}
+	}
+	if g.castleRights[king.Color].right {
+		if (g.board[king.Location.Row][5] == nil) && (g.board[king.Location.Row][6] == nil) {
+			possibleMoves = append(possibleMoves, Location{Row: king.Location.Row, Col: king.Location.Col + 2})
+		}
+	}
+	return possibleMoves
+}
+
+func (g *ChessEngine) generateKnightPossibleMoves(piece *Piece) []Location {
+	possibleMoves := []Location{}
+	destinations := []Location{
+		{Row: piece.Location.Row + 2, Col: piece.Location.Col + 1},
+		{Row: piece.Location.Row + 2, Col: piece.Location.Col - 1},
+		{Row: piece.Location.Row - 2, Col: piece.Location.Col + 1},
+		{Row: piece.Location.Row - 2, Col: piece.Location.Col - 1},
+		{Row: piece.Location.Row + 1, Col: piece.Location.Col + 2},
+		{Row: piece.Location.Row + 1, Col: piece.Location.Col - 2},
+		{Row: piece.Location.Row - 1, Col: piece.Location.Col + 2},
+		{Row: piece.Location.Row - 1, Col: piece.Location.Col - 2},
+	}
+
+	for _, location := range destinations {
+		if !g.occupiable(piece, location) {
+			continue
+		}
+		possibleMoves = append(possibleMoves, location)
+	}
+
+	return possibleMoves
+}
+
+func (g *ChessEngine) finish(reason Reason, winner Color) {
+	g.result = Result{
+		Reason:      reason,
+		WinnerColor: winner,
+	}
+	g.finished = true
+}
+
+func (g *ChessEngine) IsInPossibleMoves(piece *Piece, loc Location) bool {
+	possibleMoves := g.possibleMoves[piece]
+	for i := range possibleMoves {
+		if possibleMoves[i].Equals(loc) {
+			return true
+		}
+	}
+	return false
+}
+
+func (g *ChessEngine) Play(playerColor Color, move Move) error {
 	if g.finished {
 		return ErrGameEnd
 	}
@@ -92,205 +358,49 @@ func (g *chessEngine) Play(playerColor Color, move Move) error {
 		return ErrNotPlayersTurn
 	}
 
-	if !g.isValidMove(move.From, move.To) {
+	piece := g.board[move.From.Row][move.From.Col]
+	if piece == nil {
 		return ErrInvalidPieceMove
 	}
-	if g.board[move.From.Row][move.From.Col] == nil {
+	if piece.Color != playerColor {
 		return ErrInvalidPieceMove
 	}
-	if g.board[move.From.Row][move.From.Col].Color != playerColor {
+
+	if !g.IsInPossibleMoves(piece, move.To) {
 		return ErrInvalidPieceMove
 	}
-	if err := g.movePiece(playerColor, move); err != nil {
-		return err
-	}
+
+	rb := NewRollBack(g)
+	rb.Do(move)
+
 	g.switchTurn()
 
-	if g.IsCheckmated() {
-		g.winner = g.turn.OppositeColor()
-		g.finished = true
+	if result := g.checkResult(); result != NoResult {
+		g.finish(result.Reason, result.WinnerColor)
 	}
 	return nil
 }
 
-type RollBackMovement struct {
-	game          *chessEngine
-	capturedPiece *Piece
-	move          Move
-	castled       bool
-	rolledBack    bool
-	promoted      bool
-}
-
-func NewRollBack(game *chessEngine) *RollBackMovement {
-	return &RollBackMovement{
-		game: game,
-	}
-}
-
-func (r *RollBackMovement) CheckPromotion(move Move) {
-	piece := r.game.board[move.From.Row][move.From.Col]
-	if piece.Type == Pawn {
-		if piece.Color == Black && move.To.Row == 0 {
-			piece.Type = Queen
-			r.promoted = true
-		} else if move.To.Row == 7 {
-			piece.Type = Queen
-			r.promoted = true
+func (g *ChessEngine) checkResult() Result {
+	for _, locations := range g.possibleMoves {
+		if len(locations) != 0 {
+			return NoResult
 		}
 	}
-}
-func (r *RollBackMovement) isCastling() bool {
-	if (r.game.board[r.move.From.Row][r.move.From.Col].Type == King) && (math.Abs(float64(r.move.From.Col)-float64(r.move.To.Col)) == 2) {
-		return true
-	}
-	return false
-}
-
-func (r *RollBackMovement) doCastling() {
-	color := r.game.board[r.move.From.Row][r.move.From.Col].Color
-	backRow := 0
-	if color == Black {
-		backRow = 7
-	}
-
-	if r.move.To.Col == 6 {
-		r.game.castleRights[color] = castling{
-			left:  r.game.castleRights[color].left,
-			right: false,
-		}
-		r.game.board[backRow][5] = r.game.board[backRow][7]
-		r.game.board[backRow][6] = r.game.board[backRow][4]
-		r.game.board[backRow][4] = nil
-		r.game.board[backRow][7] = nil
-		return
-	}
-	if r.move.To.Col == 2 {
-		r.game.castleRights[color] = castling{
-			left:  false,
-			right: r.game.castleRights[color].right,
-		}
-		r.game.board[backRow][3] = r.game.board[backRow][0]
-		r.game.board[backRow][2] = r.game.board[backRow][4]
-		r.game.board[backRow][4] = nil
-		r.game.board[backRow][0] = nil
-	}
-}
-
-func (r *RollBackMovement) Do(move Move) {
-	r.move = move
-
-	if r.isCastling() {
-		r.doCastling()
-		r.castled = true
-		return
-	}
-
-	if r.game.board[move.To.Row][move.To.Col] != nil {
-		r.capturedPiece = r.game.board[move.To.Row][move.To.Col]
-		r.capturedPiece.Captured = true
-	}
-
-	r.CheckPromotion(move)
-
-	r.game.board[move.To.Row][move.To.Col] = r.game.board[move.From.Row][move.From.Col]
-	r.game.board[move.From.Row][move.From.Col] = nil
-	r.game.board[move.To.Row][move.To.Col].Location.Col = move.To.Col
-	r.game.board[move.To.Row][move.To.Col].Location.Row = move.To.Row
-}
-
-func (r *RollBackMovement) rollBackCastle() {
-	color := r.game.board[r.move.To.Row][r.move.To.Col].Color
-
-	r.game.board[r.move.To.Row][4] = r.game.board[r.move.To.Row][r.move.To.Col]
-	r.game.board[r.move.To.Row][r.move.To.Col] = nil
-	if r.move.To.Col == 2 {
-		r.game.board[r.move.To.Row][0] = r.game.board[r.move.From.Row][3]
-		r.game.board[r.move.To.Row][3] = nil
-		r.game.castleRights[color] = castling{
-			left:  true,
-			right: r.game.castleRights[color].right,
-		}
-	} else {
-		r.game.board[r.move.To.Row][7] = r.game.board[r.move.To.Row][5]
-		r.game.board[r.move.To.Row][5] = nil
-		r.game.castleRights[color] = castling{
-			left:  r.game.castleRights[color].left,
-			right: true,
-		}
-	}
-}
-
-func (r *RollBackMovement) RollBack() {
-	if r.rolledBack {
-		return
-	}
-
-	if r.castled {
-		r.rollBackCastle()
-		r.rolledBack = true
-		return
-	}
-	if r.capturedPiece != nil {
-		r.capturedPiece.Captured = false
-	}
-
-	r.game.board[r.move.From.Row][r.move.From.Col] = r.game.board[r.move.To.Row][r.move.To.Col]
-	r.game.board[r.move.To.Row][r.move.To.Col] = r.capturedPiece
-	r.game.board[r.move.From.Row][r.move.From.Col].Location.Col = r.move.From.Col
-	r.game.board[r.move.From.Row][r.move.From.Col].Location.Row = r.move.From.Row
-
-	if r.promoted {
-		r.game.board[r.move.From.Row][r.move.From.Col].Type = Pawn
-	}
-	r.rolledBack = true
-}
-
-func (g *chessEngine) IsCheckmated() bool {
 	king := g.kings[g.turn]
-	if !g.isChecked(king.Color) {
-		return false
-	}
-
-	locations := []Location{
-		{king.Location.Row, king.Location.Col - 1},
-		{king.Location.Row, king.Location.Col + 1},
-		{king.Location.Row + 1, king.Location.Col},
-		{king.Location.Row - 1, king.Location.Col},
-		{king.Location.Row + 1, king.Location.Col + 1},
-		{king.Location.Row + 1, king.Location.Col - 1},
-		{king.Location.Row - 1, king.Location.Col + 1},
-		{king.Location.Row - 1, king.Location.Col - 1},
-	}
-	for _, location := range locations {
-		if err := location.Validate(); err != nil {
-			continue
-		}
-		if g.isValidMove(king.Location, location) {
-			rb := NewRollBack(g)
-
-			rb.Do(Move{From: king.Location, To: location})
-
-			isChecked := g.isChecked(king.Color)
-
-			rb.RollBack()
-
-			if !isChecked {
-				return false
-			}
+	if g.isChecked(king.Color) {
+		return Result{
+			Reason:      Checkmate,
+			WinnerColor: king.Color.OppositeColor(),
 		}
 	}
-	return true
-}
-
-func (g *chessEngine) GetWinner() Color {
-	if g.finished {
-		return g.winner
+	return Result{
+		Reason:      Stalemate,
+		WinnerColor: Empty,
 	}
-	return Empty
 }
 
-func (g *chessEngine) Print() {
+func (g *ChessEngine) Print() {
 	fmt.Println("########")
 	for i := 0; i < 8; i++ {
 		for j := 0; j < 8; j++ {
@@ -305,26 +415,24 @@ func (g *chessEngine) Print() {
 	fmt.Println("########")
 }
 
-func (g *chessEngine) movePiece(playerColor Color, move Move) error {
-	rb := NewRollBack(g)
-
-	rb.Do(move)
-	if g.isChecked(playerColor) {
-		rb.RollBack()
-		return ErrChecked
-	}
-
-	return nil
-}
-func (g *chessEngine) switchTurn() {
+func (g *ChessEngine) switchTurn() {
 	if g.turn == White {
 		g.turn = Black
 	} else {
 		g.turn = White
 	}
+	g.generatePossibleMoves()
+}
+func (g *ChessEngine) SwitchTurn() {
+	if g.turn == White {
+		g.turn = Black
+	} else {
+		g.turn = White
+	}
+	g.generatePossibleMoves()
 }
 
-func (g *chessEngine) isChecked(color Color) bool {
+func (g *ChessEngine) isChecked(color Color) bool {
 	king := g.kings[color]
 	if king == nil {
 		panic("king is not there")
@@ -339,7 +447,7 @@ func (g *chessEngine) isChecked(color Color) bool {
 	return false
 }
 
-func (g *chessEngine) isValidMove(src, dst Location) bool {
+func (g *ChessEngine) isValidMove(src, dst Location) bool {
 	piece := g.board[src.Row][src.Col]
 
 	if piece == nil {
@@ -370,7 +478,7 @@ func (g *chessEngine) isValidMove(src, dst Location) bool {
 	}
 }
 
-func (g *chessEngine) isValidCastling(src, dst Location) bool {
+func (g *ChessEngine) isValidCastling(src, dst Location) bool {
 	color := g.board[src.Row][src.Col].Color
 	backRow := 0
 	if color == Black {
@@ -404,7 +512,7 @@ func (g *chessEngine) isValidCastling(src, dst Location) bool {
 	return false
 }
 
-func (g *chessEngine) isValidKingMove(src, dst Location) bool {
+func (g *ChessEngine) isValidKingMove(src, dst Location) bool {
 	// Castling
 	if math.Abs(float64(src.Col)-float64(dst.Col)) == 2 && math.Abs(float64(src.Row)-float64(dst.Row)) == 0 {
 		return g.isValidCastling(src, dst)
@@ -420,7 +528,7 @@ func (g *chessEngine) isValidKingMove(src, dst Location) bool {
 		(src.Col == dst.Col-1) && (src.Row == dst.Row-1)
 }
 
-func (g *chessEngine) isValidRookMove(src, dst Location) bool {
+func (g *ChessEngine) isValidRookMove(src, dst Location) bool {
 	if src.Col == dst.Col && src.Row < dst.Row {
 		// Move down
 		for rowStep := src.Row + 1; rowStep < dst.Row; rowStep++ {
@@ -457,7 +565,7 @@ func (g *chessEngine) isValidRookMove(src, dst Location) bool {
 	return false
 }
 
-func (g *chessEngine) isValidBishopMove(src, dst Location) bool {
+func (g *ChessEngine) isValidBishopMove(src, dst Location) bool {
 	if ((dst.Col - src.Col) == (dst.Row - src.Row)) && ((dst.Col - src.Col) > 0) {
 		// Move up-right
 		colStep := src.Col + 1
@@ -502,14 +610,14 @@ func (g *chessEngine) isValidBishopMove(src, dst Location) bool {
 	return false
 }
 
-func (g *chessEngine) isValidKnightMove(src, dst Location) bool {
+func (g *ChessEngine) isValidKnightMove(src, dst Location) bool {
 	return dst.Row == src.Row+2 && math.Abs(float64(dst.Col-src.Col)) == 1 ||
 		dst.Row == src.Row-2 && math.Abs(float64(dst.Col-src.Col)) == 1 ||
 		dst.Col == src.Col+2 && math.Abs(float64(dst.Row-src.Row)) == 1 ||
 		dst.Col == src.Col-2 && math.Abs(float64(dst.Row-src.Row)) == 1
 }
 
-func (g *chessEngine) isValidPawnMove(src, dst Location) bool {
+func (g *ChessEngine) isValidPawnMove(src, dst Location) bool {
 	if g.board[src.Row][src.Col].Color == White {
 		if src.Col == dst.Col && dst.Row == src.Row+1 && g.board[dst.Row][dst.Col] == nil {
 			return true

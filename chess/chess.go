@@ -28,8 +28,7 @@ func (m Move) Validate() error {
 }
 
 type Chess interface {
-	GetWinner() Color
-	IsFinished() bool // Check is the game is finished
+	GetResult() Result // Return game result if game is finished otherwise return NoResult
 	Play(playerColor Color, m Move) error
 	Exit() // Clear the game state
 }

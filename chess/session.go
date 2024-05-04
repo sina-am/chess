@@ -1,18 +1,14 @@
 package chess
 
 import (
-	"fmt"
 	"time"
 )
 
 type chessSession struct {
-	engine         *chessEngine
+	*ChessEngine
 	lastTimePlayed map[Color]time.Time
 	remainingTimes map[Color]time.Duration
 	tickers        map[Color]*time.Ticker
-
-	finished bool
-	winner   Color
 }
 
 func NewSession(duration time.Duration) *chessSession {
@@ -20,8 +16,7 @@ func NewSession(duration time.Duration) *chessSession {
 	whiteTimer := time.NewTicker(10 * time.Minute)
 
 	session := &chessSession{
-		winner: Empty,
-		engine: engine,
+		ChessEngine: engine,
 		lastTimePlayed: map[Color]time.Time{
 			White: time.Now(),
 			Black: {},
@@ -42,17 +37,7 @@ func NewSession(duration time.Duration) *chessSession {
 
 func (g *chessSession) timeoutTicker(ticker *time.Ticker, playerColor Color) {
 	<-ticker.C
-	fmt.Printf("%s Time out", playerColor.String())
-	g.finished = true
-	g.winner = playerColor.OppositeColor()
-}
-
-func (g *chessSession) GetWinner() Color {
-	return g.engine.GetWinner()
-}
-
-func (g *chessSession) IsFinished() bool {
-	return g.finished || g.engine.IsFinished()
+	g.finish(Timeout, playerColor.OppositeColor())
 }
 
 func (g *chessSession) Play(playerColor Color, m Move) error {
@@ -60,7 +45,7 @@ func (g *chessSession) Play(playerColor Color, m Move) error {
 		return ErrGameEnd
 	}
 
-	err := g.engine.Play(playerColor, m)
+	err := g.ChessEngine.Play(playerColor, m)
 	if err != nil {
 		return err
 	}

@@ -7,6 +7,7 @@ type Location struct {
 	Col int `json:"col"`
 }
 
+// Check if the location is out of the board
 func (loc Location) Validate() error {
 	if loc.Row >= 0 && loc.Row < 8 && loc.Col >= 0 && loc.Col < 8 {
 		return nil
@@ -32,6 +33,25 @@ const (
 	Knight
 	Pawn
 )
+
+func (p PieceType) GetName() string {
+	switch p {
+	case King:
+		return "king"
+	case Rook:
+		return "rook"
+	case Bishop:
+		return "bishop"
+	case Queen:
+		return "queen"
+	case Knight:
+		return "knight"
+	case Pawn:
+		return "pawn"
+	default:
+		panic("invalid piece type")
+	}
+}
 
 type Color int
 
