@@ -11,29 +11,12 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-type ClientEventType string
-
-const (
-	StartedClientEvent ClientEventType = "started"
-	EndGameClientEvent ClientEventType = "ended"
-	PlayedClientEvent  ClientEventType = "played"
-)
-
 type OnlineGame struct {
 	Storage storage.Storage
 	Players map[chess.Color]*onlinePlayer
 	Game    chess.Chess
 
 	drawOffered *onlinePlayer
-}
-
-type StartGamePayloadWSMsg struct {
-	Opponent string `json:"opponent"`
-	Tile     string `json:"tile"`
-}
-type StartGameWSMsg struct {
-	Type    ClientEventType       `json:"type"`
-	Payload StartGamePayloadWSMsg `json:"payload"`
 }
 
 func NewOnlineGame(s storage.Storage, p1, p2 *onlinePlayer, duration time.Duration) *OnlineGame {
@@ -52,18 +35,18 @@ func NewOnlineGame(s storage.Storage, p1, p2 *onlinePlayer, duration time.Durati
 	p2.currentGame = game
 	p2.status = StatusPlaying
 
-	p1.client.Send(StartGameWSMsg{
-		Type: StartedClientEvent,
-		Payload: StartGamePayloadWSMsg{
-			Opponent: p2.user.GetName(),
-			Tile:     chess.White.String(),
+	p1.client.Send(types.StartGameMsgOut{
+		Type: types.StartedClientEvent,
+		Payload: types.StartGamePayloadMsgOut{
+			You:      types.Player{UserId: primitive.NilObjectID, Name: p1.user.GetName(), Color: chess.White},
+			Opponent: types.Player{UserId: primitive.NilObjectID, Name: p2.user.GetName(), Color: chess.Black},
 		},
 	})
-	p2.client.Send(StartGameWSMsg{
-		Type: StartedClientEvent,
-		Payload: StartGamePayloadWSMsg{
-			Opponent: p1.user.GetName(),
-			Tile:     chess.Black.String(),
+	p2.client.Send(types.StartGameMsgOut{
+		Type: types.StartedClientEvent,
+		Payload: types.StartGamePayloadMsgOut{
+			You:      types.Player{UserId: primitive.NilObjectID, Name: p2.user.GetName(), Color: chess.Black},
+			Opponent: types.Player{UserId: primitive.NilObjectID, Name: p1.user.GetName(), Color: chess.White},
 		},
 	})
 
@@ -90,19 +73,16 @@ func (g *OnlineGame) Play(p *onlinePlayer, move chess.Move) error {
 		return err
 	}
 
-	p.client.Send(map[string]string{
-		"message": fmt.Sprintf("you played %d", move),
-	})
-
+	msg := types.PlayGameMsgOut{
+		Type: types.PlayedClientEvent,
+		Payload: types.PlayGamePayloadMsgOut{
+			Player: p.user.GetId(),
+			Move:   move,
+		},
+	}
 	for _, pl := range g.Players {
 		if p != pl {
-			pl.client.Send(map[string]any{
-				"type": PlayedClientEvent,
-				"payload": map[string]any{
-					"player": p.user.GetId(),
-					"move":   move,
-				},
-			})
+			pl.client.Send(msg)
 		}
 	}
 
@@ -155,12 +135,12 @@ func (g *OnlineGame) Exit(p *onlinePlayer) error {
 
 func (g *OnlineGame) endGame(result chess.Result) error {
 	for _, p := range g.Players {
-		p.client.Send(map[string]any{
-			"type": EndGameClientEvent,
-			"payload": map[string]any{
-				"winner": result.WinnerColor.String(),
-				"score":  10,
-				"reason": string(result.Reason),
+		p.client.Send(types.EndGameMsgOut{
+			Type: types.EndGameClientEvent,
+			Payload: types.EndGamePayloadMsgOut{
+				Winner: result.WinnerColor,
+				Score:  10,
+				Reason: result.Reason,
 			},
 		})
 		p.currentGame = nil
@@ -174,8 +154,8 @@ func (g *OnlineGame) endGame(result chess.Result) error {
 		game := types.Game{
 			Id: primitive.NewObjectID(),
 			Players: []types.Player{
-				{UserId: player1.user.GetId(), Color: chess.White.String()},
-				{UserId: player2.user.GetId(), Color: chess.Black.String()},
+				{UserId: player1.user.GetId(), Color: chess.White},
+				{UserId: player2.user.GetId(), Color: chess.Black},
 			},
 			Winner: result.WinnerColor.String(),
 			Reason: string(result.Reason),

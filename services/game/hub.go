@@ -5,8 +5,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/sina-am/chess/auth"
 	"github.com/sina-am/chess/chess"
+	"github.com/sina-am/chess/services/auth"
 	"github.com/sina-am/chess/storage"
 )
 
@@ -326,7 +326,7 @@ func (h *gameHandler) handleExit(c Client) {
 		h.waitList.Remove(c)
 		player.status = StatusConnected
 	} else if player.status == StatusPlaying {
-		h.handleExitGame(player, c)
+		h.handleExitGame(player)
 		player.status = StatusConnected
 	}
 }
@@ -360,7 +360,7 @@ func (h *gameHandler) handleRespondDraw(c Client, accepted bool) {
 	player.currentGame.RespondDraw(player, accepted)
 }
 
-func (h *gameHandler) handleExitGame(player *onlinePlayer, c Client) {
+func (h *gameHandler) handleExitGame(player *onlinePlayer) {
 	g := player.currentGame
 	if err := g.Exit(player); err != nil {
 		log.Print(err)

@@ -1,7 +1,8 @@
 package types
 
 import (
-	"github.com/sina-am/chess/auth"
+	"github.com/sina-am/chess/chess"
+	"github.com/sina-am/chess/services/auth"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -15,7 +16,8 @@ const (
 
 type Player struct {
 	UserId primitive.ObjectID `json:"user_id" bson:"user_id"`
-	Color  string             `json:"color" bson:"color"`
+	Name   string             `json:"name"`
+	Color  chess.Color        `json:"color" bson:"color"`
 }
 type Game struct {
 	Id      primitive.ObjectID `json:"id" bson:"_id,omitempty"`

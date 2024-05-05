@@ -1,9 +1,9 @@
 {{ define "content"}}
-<div id="loadingLogo">
-    <div class="spinner-border ms-auto d-none" aria-hidden="true"></div>
+<div id="loading" class="row">
+    <div class="spinner-border ms-auto" aria-hidden="true"></div>
     <strong role="status">Loading...</strong>
 </div>
-<div class="row" id="game">
+<div class="row d-none" id="game">
     <div class="col-md" id="gameSection">
         <div class="d-flex flex-start align-items-center mb-2">
             <img class="rounded-circle shadow-1-strong me-3" src="static/img/profile-icon.gif" alt="avatar"
@@ -22,8 +22,7 @@
         </div>
     </div>
     <div class="col-md" id="sideBar">
-        <div id="gameWinner"></div>
-        <p style="color: red;" id="gameStatus">No winner</p>
+        <div id="result"></div>
         <button id="exitBtn" class="btn btn-danger">Resign</button>
         <button id="offerDrawBtn" class="btn btn-secondary">Offer Draw</button>
     </div>

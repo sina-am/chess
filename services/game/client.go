@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/sina-am/chess/auth"
-	"github.com/sina-am/chess/chess"
+	"github.com/sina-am/chess/services/auth"
+	"github.com/sina-am/chess/types"
 )
 
 var (
@@ -18,7 +18,7 @@ var (
 )
 
 type message struct {
-	Type    string `json:"type"`
+	Type    types.ServerEventType `json:"type"`
 	Payload json.RawMessage
 }
 
@@ -37,7 +37,7 @@ type WSClient struct {
 	close chan error
 
 	gameHandler GameHandler
-	msgHandler  map[string]func(message) error
+	msgHandler  map[types.ServerEventType]func(message) error
 }
 
 func NewWSClient(conn *websocket.Conn, gamHandler GameHandler, user auth.User) *WSClient {
@@ -49,12 +49,12 @@ func NewWSClient(conn *websocket.Conn, gamHandler GameHandler, user auth.User) *
 		err:         make(chan error),
 		close:       make(chan error),
 	}
-	client.msgHandler = map[string]func(message) error{
-		"start":       client.handleStart,
-		"play":        client.handlePlay,
-		"exit":        client.handleExit,
-		"offerDraw":   client.handleOfferDraw,
-		"respondDraw": client.handleRespondDraw,
+	client.msgHandler = map[types.ServerEventType]func(message) error{
+		types.StartServerEvent:        client.handleStart,
+		types.PlayServerEvent:         client.handlePlay,
+		types.ExitServerEvent:         client.handleExit,
+		types.OfferDrawServerEvent:    client.handleOfferDraw,
+		types.ResponseDrawServerEvent: client.handleRespondDraw,
 	}
 	return client
 }
@@ -128,12 +128,6 @@ func (p *WSClient) writeConn(ctx context.Context) {
 	}
 }
 
-type StartGameMessage struct {
-	Id       string `json:"id,omitempty"`
-	Name     string `json:"name"`
-	Duration int    `json:"duration"`
-}
-
 func (p *WSClient) handleMessage(msg message) error {
 	handler, found := p.msgHandler[msg.Type]
 	if !found {
@@ -143,7 +137,7 @@ func (p *WSClient) handleMessage(msg message) error {
 }
 
 func (p *WSClient) handleStart(msg message) error {
-	payload := StartGameMessage{}
+	payload := types.StartGameMsgIn{}
 	if err := json.Unmarshal(msg.Payload, &payload); err != nil {
 		return ErrInvalidPayload
 	}
@@ -166,12 +160,8 @@ func (p *WSClient) handleStart(msg message) error {
 	return nil
 }
 
-type PlayGameMessage struct {
-	Move chess.Move `json:"move"`
-}
-
 func (p *WSClient) handlePlay(msg message) error {
-	payload := PlayGameMessage{}
+	payload := types.PlayGameMsgIn{}
 	if err := json.Unmarshal(msg.Payload, &payload); err != nil {
 		return err
 	}

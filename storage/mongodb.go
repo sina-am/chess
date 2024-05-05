@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/sina-am/chess/auth"
 	"github.com/sina-am/chess/config"
+	"github.com/sina-am/chess/services/auth"
 	"github.com/sina-am/chess/types"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"

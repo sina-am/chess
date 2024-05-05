@@ -1,17 +1,20 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
-	"github.com/sina-am/chess/auth"
 	"github.com/sina-am/chess/config"
 	"github.com/sina-am/chess/core"
+	"github.com/sina-am/chess/services/auth"
 	"github.com/sina-am/chess/services/game"
 	"github.com/sina-am/chess/services/users"
 	"github.com/sina-am/chess/storage"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type App interface {
@@ -35,6 +38,14 @@ func startApps(cfg *config.Config, e *echo.Echo, apps []App, a auth.Authenticato
 	}
 
 	return nil
+}
+
+type userFetcher struct {
+	storage storage.Storage
+}
+
+func (fetcher *userFetcher) GetUserById(ctx context.Context, id primitive.ObjectID) (auth.User, error) {
+	return fetcher.storage.GetUserById(ctx, id)
 }
 
 func main() {
@@ -69,16 +80,32 @@ func main() {
 
 	storage := storage.NewMemoryStorage()
 
-	gameApp, err := game.NewApp(cfg, storage)
+	authenticator := auth.NewJWTAuthentication(cfg.SecretKey, &userFetcher{storage})
+	userRenderer, err := core.NewTemplateRenderer(cfg.Debug, "./services/users/templates")
 	if err != nil {
-		e.Logger.Fatal(err)
+		log.Fatal(err)
 	}
-	userApp, err := users.NewApp(cfg, storage)
+	userSrv := users.NewAPIService(storage, authenticator, userRenderer)
+
+	e.POST("/auth/login", userSrv.AuthenticationPOST)
+	e.GET("/auth/login", userSrv.AuthenticationGET)
+	e.POST("/auth/registration", userSrv.RegistrationAPI)
+	e.GET("/users", userSrv.UsersAPI)
+
+	gameRenderer, err := core.NewTemplateRenderer(cfg.Debug, "./services/game/templates")
 	if err != nil {
-		e.Logger.Fatal(err)
+		log.Fatal(err)
 	}
-	authenticator := userApp.GetAuthenticator()
-	startApps(cfg, e, []App{gameApp, userApp}, authenticator)
+	gameSrv := game.NewAPIService(cfg, storage, authenticator, gameRenderer)
+
+	e.GET("/players", gameSrv.GetPlayers)
+	e.GET("/ws", gameSrv.WebSocketAPI)
+	e.GET("/game-options", gameSrv.GameOptions)
+	e.POST("/game-options", gameSrv.GameOptions)
+	e.GET("/game", gameSrv.StartGame)
+	e.GET("/", gameSrv.Home)
+
+	go gameSrv.GameHandler.Start()
 
 	e.Use(authenticator.AuthenticationMiddleware)
 	e.Logger.Fatal(e.Start(":8080"))

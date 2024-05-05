@@ -6,8 +6,9 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/labstack/echo/v4"
-	"github.com/sina-am/chess/auth"
+	"github.com/sina-am/chess/config"
 	"github.com/sina-am/chess/core"
+	"github.com/sina-am/chess/services/auth"
 	"github.com/sina-am/chess/storage"
 )
 
@@ -17,6 +18,21 @@ type APIService struct {
 	GameHandler   GameHandler
 	Renderer      core.Renderer
 	Authenticator auth.Authenticator
+}
+
+func NewAPIService(cfg *config.Config, s storage.Storage, auth auth.Authenticator, renderer core.Renderer) *APIService {
+	return &APIService{
+		Storage: s,
+		WsUpgrader: websocket.Upgrader{
+			CheckOrigin:      func(r *http.Request) bool { return true },
+			HandshakeTimeout: time.Second * 3,
+			ReadBufferSize:   1024,
+			WriteBufferSize:  1024,
+		},
+		GameHandler:   NewGameHandler(NewMemoryWaitList(), s),
+		Authenticator: auth,
+		Renderer:      renderer,
+	}
 }
 
 func (s *APIService) GameOptions(c echo.Context) error {

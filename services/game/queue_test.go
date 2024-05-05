@@ -3,7 +3,7 @@ package game
 import (
 	"testing"
 
-	"github.com/sina-am/chess/auth"
+	"github.com/sina-am/chess/services/auth"
 	"github.com/stretchr/testify/assert"
 )
 

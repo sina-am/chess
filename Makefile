@@ -2,7 +2,7 @@ bootstrap_path=./static/bootstrap/dist
 
 build:
 	@go build -o bin/game *.go
-	@GOOS=js GOARCH=wasm go build -o static/main.wasm front/main.go
+	@GOOS=js GOARCH=wasm go build -o static/main.wasm front/*
 	@cp /usr/local/go/misc/wasm/wasm_exec.js static/js
 
 download:

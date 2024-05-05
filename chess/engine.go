@@ -106,6 +106,10 @@ func NewFromPieces(pieces []*Piece) *ChessEngine {
 	return engine
 }
 
+func (g *ChessEngine) GetTurn() Color {
+	return g.turn
+}
+
 func (g *ChessEngine) GetResult() Result {
 	if g.finished {
 		return g.result
@@ -113,6 +117,7 @@ func (g *ChessEngine) GetResult() Result {
 	return NoResult
 }
 func (g *ChessEngine) generatePossibleMoves() {
+	clear(g.possibleMoves)
 	pieces := g.pieces[g.turn]
 
 	for i := range pieces {
@@ -135,6 +140,8 @@ func (g *ChessEngine) generatePossibleMoves() {
 		}
 	}
 }
+
+// Check if a location is in the board and occupiable
 func (g *ChessEngine) occupiable(piece *Piece, loc Location) bool {
 	if err := loc.Validate(); err != nil {
 		return false
@@ -142,13 +149,20 @@ func (g *ChessEngine) occupiable(piece *Piece, loc Location) bool {
 	if (g.board[loc.Row][loc.Col] != nil) && (g.board[loc.Row][loc.Col].Color == piece.Color) {
 		return false
 	}
+	return true
+}
 
+// Check if we move the piece to given location the king will be in check or not
+func (g *ChessEngine) checkable(piece *Piece, loc Location) bool {
 	rb := NewRollBack(g)
 	rb.Do(Move{From: piece.Location, To: loc})
 	isChecked := g.isChecked(piece.Color)
 	rb.RollBack()
+	return isChecked
+}
 
-	return !isChecked
+func (g *ChessEngine) occupiableAndSafe(piece *Piece, loc Location) bool {
+	return g.occupiable(piece, loc) && !g.checkable(piece, loc)
 }
 
 func (g *ChessEngine) generateRookPossibleMoves(piece *Piece) []Location {
@@ -157,22 +171,34 @@ func (g *ChessEngine) generateRookPossibleMoves(piece *Piece) []Location {
 	j := 0
 
 	for i = piece.Location.Row + 1; i < 8; i++ {
-		if g.occupiable(piece, Location{Row: i, Col: piece.Location.Col}) {
+		if !g.occupiable(piece, Location{Row: i, Col: piece.Location.Col}) {
+			break
+		}
+		if !g.checkable(piece, Location{Row: i, Col: piece.Location.Col}) {
 			possibleMoves = append(possibleMoves, Location{Row: i, Col: piece.Location.Col})
 		}
 	}
 	for i = piece.Location.Row - 1; i >= 0; i-- {
-		if g.occupiable(piece, Location{Row: i, Col: piece.Location.Col}) {
+		if !g.occupiable(piece, Location{Row: i, Col: piece.Location.Col}) {
+			break
+		}
+		if !g.checkable(piece, Location{Row: i, Col: piece.Location.Col}) {
 			possibleMoves = append(possibleMoves, Location{Row: i, Col: piece.Location.Col})
 		}
 	}
 	for j = piece.Location.Col + 1; j < 8; j++ {
-		if g.occupiable(piece, Location{Row: piece.Location.Row, Col: j}) {
+		if !g.occupiable(piece, Location{Row: piece.Location.Row, Col: j}) {
+			break
+		}
+		if !g.checkable(piece, Location{Row: piece.Location.Row, Col: j}) {
 			possibleMoves = append(possibleMoves, Location{Row: piece.Location.Row, Col: j})
 		}
 	}
 	for j = piece.Location.Col - 1; j >= 0; j-- {
-		if g.occupiable(piece, Location{Row: piece.Location.Row, Col: j}) {
+		if !g.occupiable(piece, Location{Row: piece.Location.Row, Col: j}) {
+			break
+		}
+		if !g.checkable(piece, Location{Row: piece.Location.Row, Col: j}) {
 			possibleMoves = append(possibleMoves, Location{Row: piece.Location.Row, Col: j})
 		}
 	}
@@ -227,7 +253,7 @@ func (g *ChessEngine) generatePawnPossibleMoves(piece *Piece) []Location {
 
 	finalPossibleMoves := []Location{}
 	for _, location := range possibleMoves {
-		if g.occupiable(piece, location) {
+		if g.occupiableAndSafe(piece, location) {
 			finalPossibleMoves = append(finalPossibleMoves, location)
 		}
 	}
@@ -240,34 +266,47 @@ func (g *ChessEngine) generateBishopPossibleMoves(piece *Piece) []Location {
 	j := piece.Location.Col + 1
 	// Down-right
 	for i := piece.Location.Row + 1; i < 8; i++ {
-		if g.occupiable(piece, Location{Row: i, Col: j}) {
-			possibleMoves = append(possibleMoves, Location{Row: i, Col: j})
-			j += 1
+		if !g.occupiable(piece, Location{Row: i, Col: j}) {
+			break
 		}
+
+		if !g.checkable(piece, Location{Row: i, Col: j}) {
+			possibleMoves = append(possibleMoves, Location{Row: i, Col: j})
+		}
+		j += 1
 	}
 	j = piece.Location.Col - 1
 	for i := piece.Location.Row + 1; i < 8; i++ {
 		// Down-left
-		if g.occupiable(piece, Location{Row: i, Col: j}) {
-			possibleMoves = append(possibleMoves, Location{Row: i, Col: j})
-			j -= 1
+		if !g.occupiable(piece, Location{Row: i, Col: j}) {
+			break
 		}
+		if !g.checkable(piece, Location{Row: i, Col: j}) {
+			possibleMoves = append(possibleMoves, Location{Row: i, Col: j})
+		}
+		j -= 1
 	}
 	j = piece.Location.Col + 1
 	for i := piece.Location.Row - 1; i >= 0; i-- {
 		// Up-right
-		if g.occupiable(piece, Location{Row: i, Col: j}) {
-			possibleMoves = append(possibleMoves, Location{Row: i, Col: j})
-			j += 1
+		if !g.occupiable(piece, Location{Row: i, Col: j}) {
+			break
 		}
+		if !g.checkable(piece, Location{Row: i, Col: j}) {
+			possibleMoves = append(possibleMoves, Location{Row: i, Col: j})
+		}
+		j += 1
 	}
 	j = piece.Location.Col - 1
 	for i := piece.Location.Row - 1; i >= 0; i-- {
 		// Up-left
-		if g.occupiable(piece, Location{Row: i, Col: j}) {
-			possibleMoves = append(possibleMoves, Location{Row: i, Col: j})
-			j -= 1
+		if !g.occupiable(piece, Location{Row: i, Col: j}) {
+			break
 		}
+		if !g.checkable(piece, Location{Row: i, Col: j}) {
+			possibleMoves = append(possibleMoves, Location{Row: i, Col: j})
+		}
+		j -= 1
 	}
 	return possibleMoves
 }
@@ -285,7 +324,7 @@ func (g *ChessEngine) generateKingPossibleMoves(king *Piece) []Location {
 	}
 	possibleMoves := []Location{}
 	for _, location := range locations {
-		if !g.occupiable(king, location) {
+		if !g.occupiableAndSafe(king, location) {
 			continue
 		}
 		possibleMoves = append(possibleMoves, location)
@@ -318,7 +357,7 @@ func (g *ChessEngine) generateKnightPossibleMoves(piece *Piece) []Location {
 	}
 
 	for _, location := range destinations {
-		if !g.occupiable(piece, location) {
+		if !g.occupiableAndSafe(piece, location) {
 			continue
 		}
 		possibleMoves = append(possibleMoves, location)
@@ -423,15 +462,6 @@ func (g *ChessEngine) switchTurn() {
 	}
 	g.generatePossibleMoves()
 }
-func (g *ChessEngine) SwitchTurn() {
-	if g.turn == White {
-		g.turn = Black
-	} else {
-		g.turn = White
-	}
-	g.generatePossibleMoves()
-}
-
 func (g *ChessEngine) isChecked(color Color) bool {
 	king := g.kings[color]
 	if king == nil {
